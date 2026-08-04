@@ -1,0 +1,18 @@
+# Trellis-managed. R2: app tooling must never format or lint these.
+.trellis/
+.claude/
+.codex/
+.qoder/
+.agents/
+AGENTS.md
+
+node_modules/
+dist/
+out/
+coverage/
+pnpm-lock.yaml
+
+# Bundled engine artifacts — fetched, not authored.
+apps/desktop/resources/katago/
+apps/desktop/resources/weights/
+apps/desktop/resources/readboard/

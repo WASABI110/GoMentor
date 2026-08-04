@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Main-process layout and the workspace dependency rules. Defines where each M1 file goes and why packages/core must stay Electron-free."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Typed error codes (SGF_*, ENGINE_*, LLM_*, IPC_*), expected-absence-as-state, and the IPC error envelope. Stage 3 parsers and Stage 4 handlers depend on these codes."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Forbidden patterns and per-file testing requirements, including the substance rules for failure modes that look green when wrong (SGF unknown props, GTP I-skip, safeStorage fallback, preload isolation)."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Structured log shape, level calibration, and the hard list of what must never be logged. Required for logger.ts and for A10 (key absent from logs)."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Renderer layout and placement rules for Stage 6 components, panels, stores, hooks. Bars Node APIs and raw IPC channel strings."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "zustand store split, the getState()-outside-React rationale the canvas renderer relies on, and the rule that main-process state is mirrored not duplicated."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M1 creates the foundations every later milestone builds on; reuse thinking keeps packages/core and packages/shared from being bypassed."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M1 spans main, preload, and renderer across four workspace packages. A change to ipc.ts ripples through all three processes."}

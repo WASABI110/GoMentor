@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    "paths": {
+      "@gomentor/shared": ["./packages/shared/src/index.ts"],
+      "@gomentor/shared/*": ["./packages/shared/src/*"],
+      "@gomentor/core": ["./packages/core/src/index.ts"],
+      "@gomentor/core/*": ["./packages/core/src/*"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "out",
+    ".trellis",
+    ".claude",
+    ".codex",
+    ".qoder",
+    ".agents"
+  ]
+}

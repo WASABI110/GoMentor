@@ -1,0 +1,11 @@
+{
+  "name": "@gomentor/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "GoMentor marketing and documentation site (placeholder — built in M5)",
+  "scripts": {
+    "typecheck": "echo \"apps/web is a placeholder; M5 adds Astro\" && exit 0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@gomentor/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "Pure domain logic for GoMentor: SGF, board rules, KataGo protocol, LLM providers. Electron-free by design.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gomentor/shared": "workspace:*",
+    "@sabaki/sgf": "^3.4.7",
+    "openai": "^4.79.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "fast-check": "^3.23.2"
+  }
+}

@@ -1,0 +1,62 @@
+appId: app.gomentor.desktop
+productName: GoMentor
+copyright: Copyright (C) 2026 GoMentor contributors
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+# KataGo binaries and weights ship OUTSIDE the asar so the engine can be
+# spawned as a child process and so blockmap diffing stays effective at
+# ~120MB+ (D6, tiered installer). Empty in M1 — the structure exists now so
+# M2 is purely additive.
+extraResources:
+  - from: resources/knowledge
+    to: knowledge
+    filter: ['**/*']
+  - from: resources/katago
+    to: katago
+    filter: ['**/*']
+  - from: resources/weights
+    to: weights
+    filter: ['**/*']
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+
+mac:
+  category: public.app-category.education
+  target:
+    - target: dmg
+      arch: [arm64]
+  # Bundled third-party binaries (KataGo) need hardened-runtime exceptions or
+  # their own signature. Deferred to M5 with the signing spike.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Education
+
+publish:
+  provider: github
+  releaseType: prerelease

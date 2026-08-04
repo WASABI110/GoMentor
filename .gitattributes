@@ -1,0 +1,47 @@
+# Trellis: append-only developer journals should merge cleanly across
+# parallel sessions/worktrees — each session only appends a new block, so
+# there is nothing to actually conflict on.
+#
+# Do NOT add a rule for workspace/*/index.md here — it is fully regenerated
+# every session, so a real conflict there is expected and safe to resolve by
+# picking either side (task state lives in task.json, not index.md). See
+# .trellis/spec/cli/backend/directory-structure.md for details.
+.trellis/workspace/*/journal-*.md merge=union
+
+# ---------------------------------------------------------------------------
+# GoMentor app rules. Appended BELOW the Trellis block above, never inside it
+# (R2 — see .trellis/tasks/*/prd.md).
+# ---------------------------------------------------------------------------
+
+# Normalize line endings: LF in the repo, native in the working tree.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Lockfile: generated, huge, and never usefully diffed by hand.
+pnpm-lock.yaml -diff linguist-generated
+
+# Binary assets.
+*.bin binary
+*.bin.gz binary
+*.gz binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.dylib binary
+*.so binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+
+# SGF fixtures are text, but they carry CJK comments and deliberately
+# malformed bytes — never let a filter rewrite them, or the byte-for-byte
+# round-trip guarantee (A5) becomes untestable.
+*.sgf -text -diff
+

@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "outDir": "./out-types/node",
+    // The main process bundles to CJS (Electron's mature path), so __dirname
+    // is available and import.meta is not. The renderer stays ESM.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "@gomentor/shared": ["../../packages/shared/src/index.ts"],
+      "@gomentor/shared/*": ["../../packages/shared/src/*"],
+      "@gomentor/core": ["../../packages/core/src/index.ts"],
+      "@gomentor/core/*": ["../../packages/core/src/*"],
+      "@main/*": ["./src/main/*"]
+    }
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "test/**/*.ts",
+    "electron.vite.config.ts"
+  ]
+}

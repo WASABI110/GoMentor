@@ -1,0 +1,25 @@
+node_modules/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+
+# Bundled engine artifacts: fetched by scripts/fetch-*.ts, never committed.
+# Checksum manifests ARE committed; the binaries and weights are not.
+apps/desktop/resources/katago/
+apps/desktop/resources/weights/
+apps/desktop/resources/readboard/
+!apps/desktop/resources/**/*.manifest.json
+
+# Local env / editor
+.env
+.env.local
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Playwright / test output
+test-results/
+playwright-report/
