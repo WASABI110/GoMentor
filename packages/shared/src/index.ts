@@ -1,6 +1,11 @@
 // @gomentor/shared — IPC contract and domain types.
 //
-// This package holds contracts only, no logic. zod is its sole dependency.
-// Stage 2 fills in ipc.ts, types/, and constants.ts.
+// Contracts only, no logic. zod is the sole dependency.
 
-export const SHARED_PACKAGE_VERSION = '0.1.0'
+export * from './ipc'
+export * from './constants'
+export * from './types/game'
+export * from './types/analysis'
+export * from './types/chat'
+export * from './types/settings'
+export * from './types/errors'

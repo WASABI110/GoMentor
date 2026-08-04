@@ -1,8 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist",
+    // No rootDir: `include` covers both src/ and test/, and a rootDir of
+    // ./src conflicts with that. Type-checking is noEmit anyway — the build
+    // output comes from electron-vite, not tsc.
+    "noEmit": true,
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
