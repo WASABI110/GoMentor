@@ -58,6 +58,19 @@ max_journal_lines: 2000
 # Trellis auto-detects workspaces during `trellis init`, but you can also
 # configure them manually here.
 #
+# Declared manually because `trellis init` ran on an empty directory, before
+# any of these existed. Lets `get_context.py --mode packages` resolve the
+# spec layers per package.
+packages:
+  desktop:
+    path: apps/desktop
+  web:
+    path: apps/web
+  shared:
+    path: packages/shared
+  core:
+    path: packages/core
+
 # packages:
 #   frontend:
 #     path: packages/frontend

@@ -194,9 +194,15 @@ git diff --exit-code -- .trellis .claude .codex .qoder .agents AGENTS.md
 
 ## Follow-up before `task.py start`
 
-- [ ] Curate `implement.jsonl` and `check.jsonl` with real entries — **required ready gate** for sub-agent-dispatch platforms (`.trellis/workflow.md:424`); the seed `_example` row does not count
-- [ ] Populate `.trellis/spec/` via the `00-bootstrap-guidelines` task, or at minimum author the frontend/backend guidelines this project actually needs (Electron three-process boundaries, React/zustand conventions, the R2 Trellis-immutability rule, GPL-3.0 provenance policy). **Empty spec means sub-agents write generic code** instead of code matching this project's conventions (`prd.md` §Technical notes)
+- [x] Curate `implement.jsonl` and `check.jsonl` with real entries — **required ready gate** for sub-agent-dispatch platforms (`.trellis/workflow.md:424`); the seed `_example` row does not count. *(Done: 8 and 7 entries respectively, seed rows removed, all referenced files verified to exist.)*
+- [x] Populate `.trellis/spec/` — **empty spec means sub-agents write generic code** instead of code matching this project's conventions. *(Done: 4 backend + 2 frontend guides + both indexes. `backend/database-guidelines.md` deferred to M2 — no persistence in M1. The 4 remaining frontend guides deferred to Stage 6, to be written from real renderer code rather than invented up front.)*
 - [ ] Declare workspace packages in `.trellis/config.yaml` so `get_context.py --mode packages` resolves spec layers
-- [ ] Confirm the `GoMentor` name (D7) before it is baked into `package.json`, app id, and `electron-builder.yml` — cheap now, tedious later
-- [ ] Obtain ≥20 real-world SGF fixtures, including genuine Fox exports (A5 cannot be satisfied with synthetic files alone)
-- [ ] Have at least one LLM endpoint reachable for manual smoke (A11) — either a cloud key or the local 4090 server running
+- [ ] Confirm the `GoMentor` name (D7) before it is baked deeper — already in `package.json`, `appId`, and `electron-builder.yml` as of Stage 1, so changing it now means a rename sweep
+- [ ] Obtain ≥20 real-world SGF fixtures, including genuine Fox exports (A5 cannot be satisfied with synthetic files alone) — **blocks Stage 3's gate**
+- [ ] Have at least one LLM endpoint reachable for manual smoke (A11) — either a cloud key or the local 4090 server running — **blocks Stage 6's gate**
+
+## Carried risk out of Stage 1
+
+- **`.npmrc` hoist config is unverified.** `node-linker=hoisted` plus the `*electron*`/`*builder*` patterns are configured, but a hoist misconfig silently omits dependencies from a packaged build and `pnpm dev` does not catch it. Verification requires unpacking a packaged build (A15, Stage 7). This is the largest unverified toolchain risk carried forward; `pnpm package:dir` is the cheap early check if it is worth de-risking sooner.
+- **A13's engine badge is currently a hardcoded string** (`App.tsx`), not the `EngineStatus` enum driving a component. Stage 2 lands the enum, Stage 6 the badge. Flagged so it is not mistaken for done at the Stage 6 gate.
+- **A1 passed only partially.** The renderer process starts and the dev server returns 200, but "no console errors or unhandled rejections" and the <5s budget are untested — both need the Stage 7 Playwright `_electron` harness.
