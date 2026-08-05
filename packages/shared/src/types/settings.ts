@@ -26,7 +26,7 @@ export type LlmProviderKind = z.infer<typeof llmProviderKindSchema>
 
 export const llmSettingsSchema = z.object({
   kind: llmProviderKindSchema.default('cloud'),
-  baseUrl: z.string().url().default('https://api.openai.com/v1'),
+  baseUrl: z.url().default('https://api.openai.com/v1'),
   model: z.string().default('gpt-4o'),
   /**
    * Read-only mirror of whether a key is stored. The key itself never leaves
@@ -71,7 +71,7 @@ export const uiSettingsSchema = z.object({
   /** Panel widths in px, persisted so layout survives restart. */
   panelWidths: z
     .object({ library: z.number().default(260), teacher: z.number().default(360) })
-    .default({ library: 260, teacher: 360 }),
+    .prefault({}),
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 
@@ -79,16 +79,21 @@ export const settingsSchema = z
   .object({
     /** Bumped only for breaking migrations. */
     version: z.number().int().min(1).default(1),
-    llm: llmSettingsSchema.default({}),
-    engine: engineSettingsSchema.default({}),
-    library: librarySettingsSchema.default({}),
-    ui: uiSettingsSchema.default({}),
+    // `.prefault({})` not `.default({})`: in zod 4, `.default` uses the value
+    // as the output verbatim, so a nested section would come back as a literal
+    // `{}` with none of its own defaults applied. `.prefault` feeds the value
+    // through the schema first, which is what recursively fills them in.
+    llm: llmSettingsSchema.prefault({}),
+    engine: engineSettingsSchema.prefault({}),
+    library: librarySettingsSchema.prefault({}),
+    ui: uiSettingsSchema.prefault({}),
     /** Opt-in, default off, no-op until consented. No content, ever. */
     telemetryConsent: z.boolean().default(false),
     debugLogging: z.boolean().default(false),
   })
   // Forward-compatibility: a newer build's keys survive a rollback's save.
-  .passthrough()
+  // `.loose()` is zod 4's spelling; `.passthrough()` is deprecated.
+  .loose()
 
 export type Settings = z.infer<typeof settingsSchema>
 

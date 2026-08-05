@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ZodTypeAny } from 'zod'
+import type { ZodType } from 'zod'
 import {
   CHANNELS,
   CHANNEL_NAMES,
@@ -200,7 +200,7 @@ const EVENT_CASES: Record<
   },
 }
 
-function expectAccepts(schema: ZodTypeAny, value: unknown, label: string): void {
+function expectAccepts(schema: ZodType, value: unknown, label: string): void {
   const result = schema.safeParse(value)
   if (!result.success) {
     throw new Error(
@@ -209,7 +209,7 @@ function expectAccepts(schema: ZodTypeAny, value: unknown, label: string): void 
   }
 }
 
-function expectRejects(schema: ZodTypeAny, value: unknown, label: string): void {
+function expectRejects(schema: ZodType, value: unknown, label: string): void {
   expect(
     schema.safeParse(value).success,
     `${label} should reject ${JSON.stringify(value)}`,

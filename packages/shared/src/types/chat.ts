@@ -15,7 +15,7 @@ export const toolCallSchema = z.object({
   id: z.string(),
   name: z.string(),
   /** Validated against the tool's own zod schema at dispatch, not here. */
-  arguments: z.record(z.unknown()),
+  arguments: z.record(z.string(), z.unknown()),
 })
 export type ToolCall = z.infer<typeof toolCallSchema>
 

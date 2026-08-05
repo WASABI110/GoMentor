@@ -58,7 +58,7 @@ Node v24.18.0, npm 11.16.0, Python 3.12.10, Windows 11 Pro. Windows-first, cross
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| Validation | **zod v4** | One schema language for IPC, settings, LLM tool args, KB frontmatter |
+| Validation | **zod v4** (4.4.3) | One schema language for IPC, settings, LLM tool args, KB frontmatter. Migrated from 3.25 during Stage 2, while `packages/shared` was the only consumer — deferring it would have meant touching far more schema surface. Note `.prefault({})`, not `.default({})`, for nested sections: in zod 4 `.default` emits the value verbatim so nested defaults never apply, which is a silent data bug rather than a type error |
 | SGF | **`@sabaki/sgf`**, wrapped | Most battle-tested JS SGF impl; handles malformed files and CJK/escaped-`]` round-trip. Wrapped because our move tree, DB rows, and IPC payloads need stable node identity raw SGF lacks |
 | Board render | **Custom Canvas 2D**, two layers | Our heatmap/ownership overlays + 361-point per-frame analysis updates are exactly where a generic lib (WGo.js, shudan) forces a fight. SVG collapses at 361 nodes with per-frame updates; WebGL costs GPU context KataGo wants |
 | LLM client | **official `openai` SDK** with configurable `baseUrl` | Both targets are OpenAI-compatible; SDK gives streaming, tool-calling, retries, abort for free |
@@ -90,7 +90,14 @@ Renderer→main is always `invoke`. Main→renderer uses typed event channels fo
 ### R4 — IPC contract
 `packages/shared/src/ipc.ts` is the single contract: namespaced `domain:verb` channel names with zod request/response schemas. `ipc/register.ts` wraps every handler with request validation (and response validation in dev builds). A lint rule forbids raw channel strings outside `ipc.ts`.
 
-M1 channels: `sgf.parse|serialize|openDialog`, `library.list|import`, `llm.sendMessage|cancel`, `settings.get|set|setSecret|hasSecret`. M1 events: `llm.delta|toolCall|done|error`, `library.changed`.
+M1 channels (11): `sgf:parse|serialize|openDialog`, `library:list|import`, `llm:sendMessage|cancel`, `settings:get|set|setSecret|hasSecret`.
+
+M1 events (5): `llm:delta|done|error`, `library:changed`, `engine:status`.
+
+Two deliberate departures from this requirement's first draft, settled during Stage 2:
+
+- **No separate `llm:toolCall` event.** Tool-call fragments ride inside `llm:delta` as a variant of `chatChunkSchema`'s discriminated union. A separate event would carry the same data on a second path and force the renderer to re-order two streams by `runId` — strictly worse than one ordered stream.
+- **`engine:status` added.** R9 requires engine state to be a first-class enum rather than an exception, so the renderer needs a push channel for transitions. Without it, `EngineStatus` would only be readable by polling.
 
 ### R5 — SGF pipeline
 Parse SGF → `GameTree` AST with stable node ids and parent/child links. Typed, zod-validated property accessors. Serialize back with correct escaping. **Unknown properties preserved byte-for-byte.** Typed errors (never hangs) on truncated, empty, or non-SGF input.

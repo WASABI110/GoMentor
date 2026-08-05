@@ -67,12 +67,12 @@ export const errorEnvelopeSchema = z.object({
   code: errorCodeSchema,
   /** Developer-facing. The renderer must not use this as primary UI text. */
   message: z.string(),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
 })
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>
 
 /** Every IPC handler returns this shape; `register.ts` maps throws into it. */
-export const ipcResultSchema = <T extends z.ZodTypeAny>(data: T) =>
+export const ipcResultSchema = <T extends z.ZodType>(data: T) =>
   z.discriminatedUnion('ok', [
     z.object({ ok: z.literal(true), data }),
     z.object({ ok: z.literal(false), error: errorEnvelopeSchema }),
