@@ -79,11 +79,36 @@ These are the "wrong but looks right" cases. A green test run is not sufficient 
 - **SGF unknown properties** must survive **byte-for-byte**, verified against real files. A round-trip test over synthetic fixtures proves nothing about files in the wild.
 - **The corpus must be real and ≥20 files.** Three synthetic fixtures passing is a failure, not a pass.
 - **Coordinate tests must actually cross `I`.** A test that never exercises the GTP `I`-skip has not tested it.
-- **Parsers must be asserted to terminate**, under a timeout — not merely to return the right error.
+- **Parsers must be asserted to terminate**, under a timeout — not merely to return the right error. But be clear about what a `{ timeout }` annotation buys: **vitest cannot interrupt synchronous code.** Measured — a test with `{ timeout: 500 }` that spins for 3s runs the full 3s and *then* fails at 3006ms. So the annotation is a post-hoc report on a loop that already finished, and against a genuine infinite sync loop it does not fail the run, it hangs the runner. Termination has to be structural: every parser loop carries a guard bounded by **input length**, so the bound is reachable and the failure is a typed error. A guard set to `Number.MAX_SAFE_INTEGER` is not a bound — 2^53 iterations outlives the process, so it presents as the hang it was meant to prevent. `sgf/parser.ts` had exactly that and was corrected. To actually verify termination, kill from outside the runner (`timeout 150 npx tsx …`).
 - **Preload isolation must be asserted at runtime in the renderer** (`window.ipcRenderer` and `window.require` are `undefined`), not by reading preload source.
 - **Redaction must be tested with a key-shaped value**, not assumed from the code.
 - **A meta-test must be shown to fail** when a channel is added without coverage. A vacuously-passing meta-test is worse than none.
+- **A measuring instrument must be shown to fail too.** The rule above applies to anything that reports on the tests, not just to tests. A mutation harness whose test filter matches nothing gets a green run for every mutation and reports `0 escaped` — the most reassuring possible output from an instrument measuring nothing. Every harness in `scripts/` therefore gates on its own baseline (`total <= 0 || failed > 0` ⇒ refuse to report) and treats an anchor matching ≠1 site as a failure rather than a skip. Both guards have fired on real mistakes; keep them in any new harness.
+- **Path filters passed to vitest resolve against the project root, not the repo root.** `npx vitest run --project core packages/core/test/foo.test.ts` matches zero files and exits 0; the filter must be `test/foo.test.ts`. This is the specific mistake the baseline gate above caught, and it is silent without it — note that it contradicts the natural reading of "always run from the repository root" below, which governs the *cwd*, not the filter.
+- **An unkillable mutation must be removed from the harness, not recorded as escaped.** Code that is provably dead cannot be covered by any test, so listing a mutation on it inflates the denominator with a check the suite cannot make. Mutate the premise that makes it dead instead (`mutate-coord-error.mts`'s `Z1` shrinks the zobrist key table), and say in the source comment that the dead branch is enforced by review rather than by tests.
 - **Packaged builds must be unpacked** to confirm dependencies are present. An `.npmrc` hoist misconfig silently omits deps and `pnpm dev` does not catch it.
+
+---
+
+## Running tests
+
+Always run from the **repository root**, never `cd` into a package:
+
+```bash
+pnpm test                          # all projects
+npx vitest run --project core      # one project
+npx vitest run --project shared
+npx vitest run --project desktop
+pnpm lint
+pnpm typecheck
+pnpm format:check
+```
+
+`cd <pkg> && npx vitest ...` works but is worse for two reasons: it does not
+match the permission allowlist in `.claude/settings.json` (so an agent hits the
+approval path on every iteration), and running one package in isolation hides
+cross-package breakage — `--project core` still resolves `@gomentor/shared`
+through the workspace, so a contract change that breaks a consumer shows up.
 
 ---
 

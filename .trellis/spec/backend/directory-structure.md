@@ -15,7 +15,7 @@ Main owns: filesystem, secrets, all outbound network, child processes (KataGo, r
 | Package | May depend on | Must never depend on |
 |---|---|---|
 | `@gomentor/shared` | `zod` only | anything else in the workspace |
-| `@gomentor/core` | `shared`, `@sabaki/sgf`, `openai` | `electron`, Node-only APIs beyond `node:*` primitives |
+| `@gomentor/core` | `shared`, `zod`, `openai` | `electron`, Node-only APIs beyond `node:*` primitives |
 | `apps/desktop` | `shared`, `core`, `electron`, Node | — |
 | `apps/web` | `shared`, `core` | `electron` |
 

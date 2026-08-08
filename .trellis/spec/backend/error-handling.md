@@ -27,6 +27,7 @@ Domain code families:
 | Prefix | Domain | Examples |
 |---|---|---|
 | `SGF_` | SGF parsing | `SGF_TRUNCATED`, `SGF_EMPTY`, `SGF_NOT_SGF`, `SGF_INVALID_PROPERTY` |
+| `BOARD_` | board geometry | `BOARD_INVALID_COORD` |
 | `ENGINE_` | KataGo | `ENGINE_NOT_FOUND`, `ENGINE_START_TIMEOUT`, `ENGINE_CRASHED`, `ENGINE_CIRCUIT_OPEN` |
 | `LLM_` | provider | `LLM_NO_KEY`, `LLM_UNAUTHORIZED`, `LLM_RATE_LIMITED`, `LLM_TIMEOUT`, `LLM_ABORTED`, `LLM_NO_TOOL_SUPPORT` |
 | `IPC_` | contract | `IPC_INVALID_REQUEST`, `IPC_INVALID_RESPONSE` |
@@ -34,6 +35,8 @@ Domain code families:
 | `SOURCE_` | integrations | `SOURCE_UNREACHABLE`, `SOURCE_AUTH_EXPIRED`, `SOURCE_SCHEMA_CHANGED` |
 
 `SGF_TRUNCATED`, `SGF_EMPTY`, and `SGF_NOT_SGF` are **distinct** codes deliberately — the user-facing message differs for each, and tests assert on the specific code.
+
+**The prefix must match the module that throws, not the caller that happens to be most common.** `board/coords.ts` originally hardcoded `SGF_INVALID_PROPERTY` because its first caller was the SGF parser; the result was that `encodeMove`, `computeGeometry`, and `fromIndex` — none of which involve a file — all reported a malformed file. Since the renderer translates `code` through the `errors` i18n namespace (line 65), a wrong prefix is wrong text shown to the user, not merely a mislabelled log line. Where a lower layer's code is genuinely wrong for a higher one, the higher layer converts at the boundary: `sgf/props.ts` catches `BOARD_INVALID_COORD` and re-throws `SGF_INVALID_PROPERTY`, because there the coordinate did come from a file. Both directions need a test, or someone "simplifies" the conversion away.
 
 ---
 

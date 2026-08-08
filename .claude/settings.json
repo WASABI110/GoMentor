@@ -2,6 +2,32 @@
   "env": {
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
   },
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(pnpm test)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm format:check)",
+      "Bash(pnpm -r typecheck)",
+      "Bash(pnpm format)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(npx tsx scripts/:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(node --version)",
+      "Bash(pnpm --version)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

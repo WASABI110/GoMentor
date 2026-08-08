@@ -42,7 +42,7 @@ Technical design for M1. Requirement IDs (R1–R11) and decision IDs (D1–D9) r
 | Package | May depend on | Must never depend on |
 |---|---|---|
 | `@gomentor/shared` | `zod` only | anything else in the workspace |
-| `@gomentor/core` | `shared`, `@sabaki/sgf`, `openai` | `electron`, Node-only APIs beyond `node:*` primitives |
+| `@gomentor/core` | `shared`, `zod`, `openai` | `electron`, Node-only APIs beyond `node:*` primitives |
 | `apps/desktop` | `shared`, `core`, `electron`, Node | — |
 | `apps/web` | `shared`, `core` | `electron` |
 
@@ -91,18 +91,20 @@ EVENTS = {
 ### SGF pipeline (R5)
 
 ```
-SGF text ──@sabaki/sgf──► node array ──adapter──► GameTree AST
-                                                   │
-                          ┌────────────────────────┼──────────────────┐
-                          ▼                        ▼                  ▼
-                    board/position          library store        (M2: DB rows)
-                    (replay to move N)      (metadata)
-                          │
-                          ▼
-                    serializer ──► SGF text (escaping + unknown props intact)
+SGF bytes ──parser──► GameTree AST (values kept raw)
+                        │
+     ┌──────────────────┼──────────────────┐
+     ▼                  ▼                  ▼
+board/position    library store      (M2: DB rows)
+(replay to move N) (metadata)
+     │
+     ▼
+serializer ──► SGF text/bytes (escaping + unknown props intact)
 ```
 
-Why wrap rather than expose `@sabaki/sgf` directly: our move tree UI, library store, IPC payloads, and (in M2) DB rows all need **stable node identity**, which raw SGF node arrays do not provide. The adapter assigns monotonic ids and parent/child links once, at parse time.
+Why hand-written rather than wrapping `@sabaki/sgf` — amended in Stage 3, see the PRD library table for the full reasoning. In short: A5 requires unknown properties to round-trip **byte-for-byte**, which means owning escape handling, because a library that decodes `\]` to `]` on read has lost the bytes needed to write it back. Values are therefore stored raw in the AST and decoded opt-in per property by the typed accessors in `props.ts`.
+
+Stable node identity was the original reason to wrap, and it is unchanged: the parser assigns monotonic ids and parent/child links once, at parse time.
 
 **Unknown-property preservation is a hard contract** (A5). SGF files in the wild carry editor-specific and engine-specific properties; silently dropping them means a user's file degrades every time it passes through GoMentor. The AST stores unrecognised properties verbatim in a passthrough bag and the serializer re-emits them.
 

@@ -81,6 +81,10 @@ Backend detection is worth logging in full because "why is analysis slow" is ans
 
 The redaction serializer strips key-shaped fields and values as a **backstop**. Do not treat it as permission — the rule is not to pass these values to a log call at all.
 
+**Error messages are log payloads.** The rule above is easy to read as being about log call sites, but the leak path that actually occurs has no log call anywhere near it. An error message is built from raw input, that error becomes another error's `cause`, and `cause` is logged in main (line 54) — so a file that makes no log call at all can still put forbidden content in the log. `AppError.toEnvelope()` does not help here: it protects the *renderer* by stripping `cause`, and the main-process log is exactly where `cause` survives.
+
+So: **any error message interpolating a value that came from a file, a prompt, or a network response must bound that value at the point it is built** — not at the point it is logged, because the author of the log call cannot see what the message contains. `sgf/diagnostic.ts` and `board/coords.ts` both implement this; the pattern is to quote short values (the diagnostic is the point) and replace long ones with their length (the length is the anomaly). Reviewing a message for this means asking where its interpolated values came from, not whether the file logs.
+
 This is not generic caution. This app holds a user's LLM credentials and their private game study; a log file that leaks either is a real harm, and log files get attached to bug reports and pasted into chats.
 
 ---

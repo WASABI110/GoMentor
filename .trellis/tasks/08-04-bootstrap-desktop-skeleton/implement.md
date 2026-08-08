@@ -65,7 +65,7 @@ No Electron dependency in this stage. Fully testable headless.
 - [ ] `packages/core/test/board/rules.test.ts` — hand-built positions: capture, suicide, ko, multi-group
 - [ ] `packages/core/src/board/zobrist.ts` — hashing (M3's pattern index needs it; cheap to land now)
 - [ ] `packages/core/src/sgf/ast.ts` — `GameTree` with stable node ids, parent/child links, unknown-prop passthrough bag
-- [ ] `packages/core/src/sgf/parser.ts` — wrap `@sabaki/sgf`, assign ids, typed errors (A6)
+- [ ] `packages/core/src/sgf/parser.ts` — hand-written tokeniser (see PRD library table, amended Stage 3), assign ids, typed errors (A6)
 - [ ] `packages/core/src/sgf/props.ts` — zod-validated property accessors
 - [ ] `packages/core/src/sgf/serializer.ts` — correct escaping, **re-emit unknown props verbatim**
 - [ ] `packages/core/test/sgf/round-trip.test.ts` + `test/fixtures/sgf/` — **≥20 real-world files**: pro games, Fox exports, variations, CJK comments, escaped `]`, unknown props, truncated, empty, non-SGF binary (A5, A6)
