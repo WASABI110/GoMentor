@@ -171,7 +171,10 @@ export default defineConfig(
       'vitest.config.ts',
       '**/vitest.config.ts',
       '**/electron.vite.config.ts',
-      'scripts/**/*.ts',
+      // `.mts` as well as `.ts`: tool scripts run through `tsx` as ES modules,
+      // and a bare `*.ts` glob leaves them on the default project, where every
+      // type-aware rule silently becomes a no-op.
+      'scripts/**/*.{ts,mts}',
     ],
     languageOptions: {
       parserOptions: {
@@ -194,7 +197,7 @@ export default defineConfig(
   },
 
   {
-    files: ['scripts/**/*.ts'],
+    files: ['scripts/**/*.{ts,mts}'],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
   },

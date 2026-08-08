@@ -11,6 +11,7 @@
     "eslint.config.js",
     "vitest.config.ts",
     "scripts/**/*.ts",
+    "scripts/**/*.mts",
     "packages/*/vitest.config.ts",
     "apps/*/vitest.config.ts",
     "apps/*/electron.vite.config.ts"

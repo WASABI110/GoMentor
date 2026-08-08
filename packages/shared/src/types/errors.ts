@@ -16,6 +16,26 @@ export const errorCodeSchema = z.enum([
   'SGF_NOT_SGF',
   'SGF_INVALID_PROPERTY',
   'SGF_UNSUPPORTED_BOARD_SIZE',
+  // Distinct from SGF_INVALID_PROPERTY: the file's syntax is fine, it is the
+  // nesting that exceeds what a recursive-descent parser can handle. Without
+  // its own code the parser would have to either mislabel it or let a bare
+  // RangeError escape, which carries no code at all.
+  'SGF_TOO_DEEP',
+  // Re-encoding to the file's original codepage is not possible (TextEncoder
+  // only emits UTF-8). Distinct because it is a *write*-side limitation of ours,
+  // not a defect in the user's file — the message and the offered remedy differ.
+  'SGF_UNSUPPORTED_ENCODING',
+
+  // Board geometry. Distinct from `SGF_INVALID_PROPERTY` because the two have
+  // different causes and different remedies: an SGF property code says the
+  // user's *file* is malformed, while this says a coordinate was out of range
+  // for the board — reached from GTP encoding, canvas geometry, and flat-index
+  // conversion, none of which involve a file. Since the renderer translates
+  // `code` via the `errors` i18n namespace, reusing the SGF code would show
+  // "this file is malformed" for a bug that has nothing to do with a file.
+  // `sgf/props.ts` converts this to `SGF_INVALID_PROPERTY` when the coordinate
+  // did come from a file, so that path is unaffected.
+  'BOARD_INVALID_COORD',
 
   // KataGo lifecycle.
   'ENGINE_NOT_FOUND',

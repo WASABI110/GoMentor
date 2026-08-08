@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@gomentor/shared": "workspace:*",
-    "@sabaki/sgf": "^3.4.7",
     "openai": "^4.79.1",
     "zod": "^4.4.3"
   },

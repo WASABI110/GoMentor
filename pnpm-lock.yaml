@@ -104,9 +104,6 @@ importers:
       '@gomentor/shared':
         specifier: workspace:*
         version: link:../shared
-      '@sabaki/sgf':
-        specifier: ^3.4.7
-        version: 3.5.0
       openai:
         specifier: ^4.79.1
         version: 4.104.0(encoding@0.1.13)(zod@4.4.3)
@@ -944,9 +941,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sabaki/sgf@3.5.0':
-    resolution: {integrity: sha512-KAkgUFe/A7jc4xZtUBAhDeH6IqPYMHoKts6nXhYHNCvBud4DChJ9EpKLDCeWuVijb960FCXvhBfAy6OkdZZpfA==}
-
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
@@ -1512,9 +1506,6 @@ packages:
     os: [darwin]
     hasBin: true
 
-  doken@1.0.2:
-    resolution: {integrity: sha512-JSVsMxaB5yikb6wBDQTGIcyNyUytrYQE7WGyGAC0EoFunUTV7Wag4p5JC2bXKuTfD7t847dy7TWcwyETUbYAiw==}
-
   dotenv-expand@11.0.7:
     resolution: {integrity: sha512-zIHwmZPRshsCdpMDyVsqGmgyP0yT8GAgXUnkdAoJisxvf33k7yO6OuoKmcTGuXPWSsm8Oh88nZicRLA9Y0rUeA==}
     engines: {node: '>=12'}
@@ -1946,10 +1937,6 @@ packages:
     engines: {node: ^8.11.2 || >=10}
     os: [darwin]
 
-  iconv-lite@0.4.24:
-    resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
-    engines: {node: '>=0.10.0'}
-
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
@@ -2049,10 +2036,6 @@ packages:
   js-yaml@4.3.1:
     resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
-
-  jschardet@2.3.0:
-    resolution: {integrity: sha512-6I6xT7XN/7sBB7q8ObzKbmv5vN+blzLcboDE1BNEsEfmRXJValMxO6OIRT69ylPBRemS3rw6US+CMCar0OBc9g==}
-    engines: {node: '>=0.1.90'}
 
   jsesc@3.1.0:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
@@ -3618,13 +3601,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
 
-  '@sabaki/sgf@3.5.0':
-    dependencies:
-      doken: 1.0.2
-    optionalDependencies:
-      iconv-lite: 0.4.24
-      jschardet: 2.3.0
-
   '@sindresorhus/is@4.6.0': {}
 
   '@szmarczak/http-timer@4.0.6':
@@ -4344,8 +4320,6 @@ snapshots:
       verror: 1.10.1
     optional: true
 
-  doken@1.0.2: {}
-
   dotenv-expand@11.0.7:
     dependencies:
       dotenv: 16.6.1
@@ -4944,11 +4918,6 @@ snapshots:
       node-addon-api: 1.7.2
     optional: true
 
-  iconv-lite@0.4.24:
-    dependencies:
-      safer-buffer: 2.1.2
-    optional: true
-
   iconv-lite@0.6.3:
     dependencies:
       safer-buffer: 2.1.2
@@ -5024,9 +4993,6 @@ snapshots:
   js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
-
-  jschardet@2.3.0:
-    optional: true
 
   jsesc@3.1.0: {}
 
