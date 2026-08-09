@@ -5,8 +5,17 @@ import { engineBackendSchema } from './analysis'
  * Persisted settings.
  *
  * Unknown keys must survive a load→save cycle: a user who runs a newer build
- * then rolls back must not lose their newer settings. `.passthrough()` on the
- * root schema is what guarantees that, and it is tested.
+ * then rolls back must not lose their newer settings. `.loose()` on the root
+ * schema is what guarantees that at the root, and it is tested. Note the limit:
+ * `.loose()` keeps unknown keys only at the level it is applied, so an unknown
+ * key *nested* under a sub-schema is still stripped by `parse`. Preserving those
+ * is `settings.ts`'s job — it merges the validated output back over the raw
+ * document rather than persisting the parsed view.
+ *
+ * Reading a value out of this schema is not the same as accepting one into it.
+ * Every field here carries a `.default()`, which means `parse` never returns a
+ * partial document — see `settingsPatchSchema` for why that made `.partial()`
+ * the wrong schema for an incoming patch.
  *
  * Secrets are never in here as plaintext. The API key lives in an opaque
  * `safeStorage`-encrypted blob; only the `hasKey` boolean crosses to the
