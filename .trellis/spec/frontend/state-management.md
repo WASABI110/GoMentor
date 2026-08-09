@@ -58,13 +58,24 @@ Otherwise keep it local. A store entry that only one component reads is indirect
 
 ## Mirroring main-process state
 
-State the main process owns is **never** duplicated as a second source of truth. The pattern:
+State the main process owns is **never** duplicated as a second source of truth. The pattern depends on whether main can change that state without being asked.
+
+**When main can change it on its own** — the library, which an import or a disk watcher mutates:
 
 1. Read once on mount via `invoke`
-2. Subscribe to the corresponding change event (`settings:changed`, `library:changed`)
+2. Subscribe to the change event (`library:changed`)
 3. Write by calling `invoke` — **not** by mutating the store directly, then let the event update it
 
 Writing the store optimistically *and* awaiting the invoke is allowed, but the event remains authoritative. If they disagree, the event wins.
+
+**When only the renderer can change it** — settings. Here the invoke's *return value* is authoritative and there is no event:
+
+1. Read once on mount via `invoke('settings:get')`
+2. Write via `invoke('settings:set', { patch })`, which responds with the whole post-write document — replace the store with it
+
+No `settings:changed` event exists, and this document used to name one in the list above. That was wrong in a way worth recording, because it would have been implemented on request: main is not the only writer *nominally* — a future disk watcher or an OS theme change could make it one — but today every write originates in the renderer, and the response already carries the authoritative document. Adding the event would mean each write updates the store twice with the same value, and the second update arrives asynchronously, so a store write that races a subsequent user edit can clobber it. The event is the right shape only once main gains an independent reason to change settings; add it then, and add it to `EVENTS` in `packages/shared/src/ipc.ts` rather than to prose here first.
+
+The general rule this leaves: **an event is for state that changes without being asked.** A response is enough for state that only changes because the renderer asked.
 
 ---
 

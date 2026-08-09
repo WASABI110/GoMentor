@@ -1,24 +1,32 @@
-// Stage 1 skeleton: proves the three-process wiring works end to end.
-// Stage 6 replaces this with the real resizable three-panel shell
-// (GameList | Board + MoveTree | TeacherChat) and persisted layout.
+import { useTranslation } from 'react-i18next'
+
+// Stage 1 skeleton, now translated. Stage 6 replaces the layout itself with the
+// real resizable three-panel shell (GameList | Board + MoveTree | TeacherChat)
+// and persisted widths; the strings it uses are already in place here so that
+// A12 — switching zh-CN ↔ en leaves no untranslated key visible — is testable
+// against the built app rather than only against the catalogues.
 
 export function App(): React.JSX.Element {
+  const { t } = useTranslation(['common', 'board', 'teacher', 'analysis'])
+
   return (
     <div className="app-shell">
       <aside className="panel panel--library">
-        <h2>棋谱库</h2>
-        <p className="placeholder">Stage 6</p>
+        <h2>{t('common:library.title')}</h2>
+        <p className="placeholder">{t('common:library.empty')}</p>
       </aside>
 
       <main className="panel panel--board">
-        <h2>棋盘</h2>
-        <p className="placeholder">Stage 6</p>
-        <p className="engine-status">引擎：unavailable</p>
+        <h2>{t('board:title')}</h2>
+        <p className="placeholder">{t('board:empty')}</p>
+        <p className="engine-status">
+          {t('analysis:engine.label')}: {t('analysis:engine.status.unavailable')}
+        </p>
       </main>
 
       <aside className="panel panel--teacher">
-        <h2>AI 教师</h2>
-        <p className="placeholder">Stage 6</p>
+        <h2>{t('teacher:title')}</h2>
+        <p className="placeholder">{t('teacher:empty')}</p>
       </aside>
     </div>
   )

@@ -1,0 +1,35 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `DOM` is the whole reason this project exists, separately from
+    // `tsconfig.test.json`.
+    //
+    // Renderer code legitimately reaches `window.gomentor` — that is the only
+    // bridge there is. A test that exercises `settingsStore` therefore pulls a DOM
+    // global into its program, and under `tsconfig.test.json` (which has `lib:
+    // ["ES2023"]` and `types: ["node"]`) that is TS2304 "Cannot find name
+    // 'window'".
+    //
+    // The fix is not to add `DOM` to `tsconfig.test.json`. Those are main-process
+    // tests, and main has no `window` or `document` at runtime — a spec that
+    // referenced one would compile and then fail in Electron, which is exactly the
+    // class of error a typechecker is meant to prevent. Same reasoning that gave
+    // the main tests their own project rather than sharing `tsconfig.node.json`:
+    // when the ambient environment differs, the project differs.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@gomentor/shared": ["../../packages/shared/src/index.ts"],
+      "@gomentor/shared/*": ["../../packages/shared/src/*"],
+      "@gomentor/core": ["../../packages/core/src/index.ts"],
+      "@gomentor/core/*": ["../../packages/core/src/*"],
+      "@renderer/*": ["./src/renderer/src/*"]
+    }
+  },
+  // `src/preload/api.d.ts` declares `window.gomentor`, so a test asserting on the
+  // bridge is checked against the real API surface rather than against `any`.
+  "include": ["test/renderer/**/*.ts", "src/preload/api.d.ts"]
+}

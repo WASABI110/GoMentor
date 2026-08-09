@@ -63,9 +63,54 @@ export type GameMeta = z.infer<typeof gameMetaSchema>
 export const gameSourceSchema = z.enum(['import', 'fox', 'readboard', 'manual'])
 export type GameSource = z.infer<typeof gameSourceSchema>
 
+/**
+ * The board before move 1: SGF `AB`/`AW` placements.
+ *
+ * Separate from `moves` and not derivable from them. A handicap game's nine
+ * stones are *position*, not play — folding them into `moves` would make move 1
+ * belong to the wrong player and shift every move-number label — so
+ * `main/sgf/adapter.ts` excludes them there, correctly. But nothing else carried
+ * them, and the renderer only ever receives a `Game`, never the AST. The result
+ * was that a handicap game reached the board with its nine stones missing.
+ *
+ * Nor can `handicap` stand in. Measured over the 44-file corpus: three files
+ * (`gnugo-ko6-jago`, `sabaki-sgf-no-ca`, `katago-sampletest9x9`) carry `AB`/`AW`
+ * with no `HA` at all, one carries 34 *white* setup stones, and a count cannot
+ * express placement in any case.
+ *
+ * ## Why an initial position rather than per-node setup
+ *
+ * SGF permits setup properties on any node, which would make this a per-move
+ * concern. It was measured instead of assumed: across all 44 corpus fixtures,
+ * **every mainline setup node occurs before move 1**, and the only four `AE`
+ * (erase) nodes in the corpus are off-mainline, inside variations. So the
+ * mainline needs an initial position and nothing more, and modelling it as one
+ * keeps replay a fold over `moves` from a known start.
+ *
+ * The bound this accepts, stated so it is not mistaken for coverage: a file that
+ * *does* place stones mid-mainline will replay without them. The AST keeps that
+ * information and `sgf:serialize` writes from the AST, so nothing is lost on
+ * disk — it is the rendered position that would be wrong, and it is the move
+ * tree in M2 that needs the per-node model.
+ */
+export const gameSetupSchema = z.object({
+  black: z.array(coordSchema).default([]),
+  white: z.array(coordSchema).default([]),
+})
+export type GameSetup = z.infer<typeof gameSetupSchema>
+
 export const gameSchema = z.object({
   id: z.string().min(1),
   meta: gameMetaSchema,
+  /**
+   * Stones on the board before move 1. `.prefault({})` rather than `.optional()`:
+   * an absent key and an empty setup mean the same thing to every consumer, and
+   * making it optional would push a `?? { black: [], white: [] }` into each of
+   * them — one of which would eventually be forgotten. `.prefault` not
+   * `.default`, for the reason `settings.ts` records: `.default({})` uses the
+   * value verbatim, leaving the inner arrays undefined.
+   */
+  setup: gameSetupSchema.prefault({}),
   /** Mainline moves. Variations live in the GameTree AST, not here. */
   moves: z.array(moveSchema),
   source: gameSourceSchema,

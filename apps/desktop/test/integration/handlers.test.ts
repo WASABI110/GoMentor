@@ -4,6 +4,7 @@ import {
   CHANNEL_NAMES,
   type ChannelName,
   type IpcResult,
+  type Locale,
   type SecretKey,
 } from '@gomentor/shared'
 // Type-only, so this is erased at compile time and does not load the module
@@ -154,9 +155,21 @@ let store: ReturnType<typeof createGameStore>
 let secrets: ReturnType<typeof fakeSecrets>
 let llm: ReturnType<typeof fakeLlm>
 
+/**
+ * Locales the fake `relabelMenu` was called with, most recent last.
+ *
+ * A recording fake rather than a no-op: main translates the native menu itself
+ * from the shared i18n JSON (R10), so a `settings:set` that changes `locale` has
+ * to rebuild it. A test that only proved the handler returned the document would
+ * pass with that rebuild deleted, and the menu would stay in the old language
+ * until the next launch.
+ */
+const relabelCalls: Locale[] = []
+
 beforeEach(() => {
   registered.clear()
   sentEvents.length = 0
+  relabelCalls.length = 0
   dialogResult = { canceled: true, filePaths: [] }
   store = createGameStore()
   secrets = fakeSecrets()
@@ -167,6 +180,7 @@ beforeEach(() => {
     secrets,
     llm,
     now: () => NOW,
+    relabelMenu: (locale) => relabelCalls.push(locale),
   })
 })
 
@@ -233,6 +247,7 @@ describe('registration covers the contract', () => {
         secrets,
         llm,
         now: () => NOW,
+        relabelMenu: (locale) => relabelCalls.push(locale),
       })
     }).not.toThrow()
     expect(registered.size).toBe(CHANNEL_NAMES.length)
@@ -274,6 +289,16 @@ describe('the boundary rejects bad requests', () => {
     expect(JSON.stringify(result)).not.toContain('sk-live')
   })
 
+  it('names a root-level rejection instead of reporting an empty path', async () => {
+    // `issue.path` is empty when the payload itself is the wrong shape, and
+    // `join('.')` turned that into `""` — a path list of empty strings reads like
+    // a field name was lost, which sends the reader looking for the wrong bug.
+    const result = await invoke('settings:hasSecret', 'not-an-object')
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.error.context?.issues).toEqual(['(root)'])
+  })
+
   it('maps an unexpected throw to a generic envelope', async () => {
     // A non-AppError must not cross with its own message: the renderer switches
     // on `code` against a closed enum, and its message must never be primary UI
@@ -290,6 +315,7 @@ describe('the boundary rejects bad requests', () => {
       secrets: exploding,
       llm,
       now: () => NOW,
+      relabelMenu: (locale) => relabelCalls.push(locale),
     })
     const result = await invoke('settings:hasSecret', { key: 'llmApiKey' })
     expect(result.ok).toBe(false)
@@ -493,6 +519,32 @@ describe('settings channels', () => {
     await invoke('settings:set', { patch: { secretBlobs: { llmApiKey: 'attacker' } } })
     const result = await invoke('settings:get', {})
     expect(JSON.stringify(result)).not.toContain('attacker')
+  })
+
+  it('rebuilds the native menu when the patch changes locale', async () => {
+    // Main translates the menu from the same i18n JSON the renderer uses (R10),
+    // so nothing else in the system will notice a locale change. Without this the
+    // menu bar keeps the old language until the next launch.
+    await invoke('settings:set', { patch: { ui: { locale: 'en' } } })
+    expect(relabelCalls).toEqual(['en'])
+  })
+
+  it('does not rebuild the menu for a patch that leaves locale alone', async () => {
+    await invoke('settings:set', { patch: { ui: { theme: 'light' } } })
+    expect(relabelCalls).toEqual([])
+  })
+
+  it('does not rebuild the menu when locale is set to the value it already had', async () => {
+    // The comparison is against the pre-update document, not "is `locale` present
+    // in the patch". A settings panel that submits the whole form sends `locale`
+    // on every save, and rebuilding the menu each time would be wasted work.
+    //
+    // `'zh-CN'` written out rather than read back from `settings:get`: it is the
+    // authoring locale and the schema default, so hardcoding it makes this fail if
+    // that default ever changes — which is exactly when someone should re-read this
+    // test rather than have it quietly keep passing against a moving value.
+    await invoke('settings:set', { patch: { ui: { locale: 'zh-CN' } } })
+    expect(relabelCalls).toEqual([])
   })
 })
 

@@ -12,12 +12,15 @@ import {
   getPlayerRank,
   getResult,
   getRuleset,
+  getSetup,
 } from '@gomentor/core/sgf/props'
 import { mainline, type SgfCollection, type SgfNode } from '@gomentor/core/sgf/ast'
 import {
   AppError,
+  type Coord,
   type Game,
   type GameMeta,
+  type GameSetup,
   type GameSummary,
   type Move,
 } from '@gomentor/shared'
@@ -104,12 +107,52 @@ function toMeta(root: SgfNode): GameMeta {
 }
 
 /**
+ * Stones on the board before move 1.
+ *
+ * Walks the mainline and collects setup placements until the first move, rather
+ * than reading the root alone. That is not defensive generality — the corpus
+ * requires it: `katago-foxlike.sgf` carries `;AB[pd][dp]` on the node *after* the
+ * root, before any move, which a root-only read would drop, losing both stones
+ * of a two-stone handicap game.
+ *
+ * Stops at the first move because that is what the corpus supports: measured
+ * across all 44 fixtures, every mainline setup node occurs before move 1 (the
+ * only mid-tree setup and all four `AE` nodes are inside variations). A file that
+ * placed stones mid-mainline would have them silently omitted here, which is why
+ * `gameSetupSchema` records that bound explicitly rather than implying the
+ * general SGF model is covered.
+ *
+ * `AE` is deliberately not applied. It erases points, so honouring it needs an
+ * ordered per-node model rather than an accumulated initial position — and no
+ * corpus file needs it before move 1. Applying it approximately would be worse
+ * than not applying it, because a wrong board looks authoritative.
+ */
+function toSetup(root: SgfNode, boardSize: GameMeta['boardSize']): GameSetup {
+  const black: Coord[] = []
+  const white: Coord[] = []
+
+  for (const node of mainline(root)) {
+    // A node may carry both setup stones and a move (SGF permits it). Setup is
+    // read first so such a node contributes its stones before the loop ends.
+    const setup = getSetup(node, boardSize)
+    black.push(...setup.black)
+    white.push(...setup.white)
+
+    if (getMove(node, boardSize) !== null) break
+  }
+
+  return { black, white }
+}
+
+/**
  * Mainline moves only. Variations are reachable through the AST, which the
  * caller keeps — see the note above about `Game` being lossy on purpose.
  *
  * Setup stones (`AB`/`AW`) are **not** moves and are excluded: a handicap game's
  * placed stones are position, not play, and folding them into `moves` would make
- * move 1 belong to the wrong player and break every move-number label.
+ * move 1 belong to the wrong player and break every move-number label. They are
+ * carried by `Game.setup` instead — see `toSetup`, which exists because for one
+ * stage they were carried by nothing at all.
  */
 function toMoves(root: SgfNode, boardSize: GameMeta['boardSize']): Move[] {
   const moves: Move[] = []
@@ -162,6 +205,7 @@ export function toGame(collection: SgfCollection, options: ToGameOptions): Game 
   return {
     id: options.id,
     meta,
+    setup: toSetup(root, meta.boardSize),
     moves: toMoves(root, meta.boardSize),
     source: options.source,
     contentHash: options.contentHash,

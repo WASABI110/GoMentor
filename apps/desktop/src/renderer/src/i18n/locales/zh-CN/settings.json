@@ -1,0 +1,70 @@
+{
+  "title": "设置",
+  "section": {
+    "ui": "界面",
+    "llm": "AI 教师",
+    "engine": "分析引擎",
+    "library": "棋谱库",
+    "privacy": "隐私"
+  },
+  "ui": {
+    "locale": "语言",
+    "theme": "主题",
+    "themeOption": {
+      "dark": "深色",
+      "light": "浅色",
+      "system": "跟随系统"
+    },
+    "showCoordinates": "显示棋盘坐标",
+    "animationsEnabled": "启用动画"
+  },
+  "llm": {
+    "kind": "服务类型",
+    "kindOption": {
+      "cloud": "云端 API",
+      "local": "本地模型"
+    },
+    "baseUrl": "接口地址",
+    "model": "模型",
+    "apiKey": "API 密钥",
+    "apiKeySet": "已保存",
+    "apiKeyUnset": "未设置",
+    "apiKeyPlaceholder": "粘贴密钥后保存,之后不会再显示",
+    "clearKey": "清除密钥",
+    "temperature": "随机性",
+    "maxTokens": "最大回复长度",
+    "toolsSupported": "工具调用",
+    "toolsUnknown": "尚未检测",
+    "toolsYes": "支持",
+    "toolsNo": "不支持"
+  },
+  "engine": {
+    "backend": "计算后端",
+    "backendAuto": "自动检测",
+    "binaryPath": "引擎路径",
+    "binaryPathDefault": "使用内置引擎",
+    "networkPath": "权重文件",
+    "maxVisits": "每手计算量",
+    "threads": "线程数",
+    "analyzeOwnership": "计算势力图"
+  },
+  "library": {
+    "roots": "监视目录",
+    "rootsEmpty": "还没有添加目录",
+    "addRoot": "添加目录…",
+    "removeRoot": "移除",
+    "watchEnabled": "自动导入新棋谱"
+  },
+  "privacy": {
+    "telemetryConsent": "发送匿名使用统计",
+    "telemetryHint": "默认关闭。只包含崩溃与功能计数,绝不包含棋谱、对话或密钥。",
+    "debugLogging": "启用调试日志",
+    "debugHint": "排查问题时打开。日志保存在本地。",
+    "revealLogs": "打开日志目录"
+  },
+  "encryptionUnavailable": {
+    "title": "无法安全保存密钥",
+    "body": "这台电脑没有可用的系统加密存储,密钥只在本次运行期间有效,关闭后需要重新输入。"
+  },
+  "saved": "已保存"
+}

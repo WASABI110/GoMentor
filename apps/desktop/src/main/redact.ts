@@ -264,3 +264,32 @@ export function redact(value: unknown): unknown {
 
 /** Exposed for tests and for the "did we bound this?" review question. */
 export const REDACTION_PLACEHOLDER = REDACTED
+
+/**
+ * Formats zod issues for a log line or an error `context`: **paths only, never
+ * values**.
+ *
+ * This lives here, next to `redact`, because it is the same rule enforced at a
+ * different layer. A rejected `settings:setSecret` request contains the user's API
+ * key and a zod issue quotes the offending input, so the "helpful" detail is
+ * exactly what `logging-guidelines.md` forbids. `redact` is the backstop; this is
+ * the deliberate choice at the point the message is built.
+ *
+ * A root-level issue — the payload is not an object at all, or a required
+ * top-level key is missing — has an empty `path`, which `join` renders as `""`.
+ * Observed in a real log line as `{"issues":[""]}`, which reads like a field name
+ * went missing rather than like the whole body being the wrong shape. `'(root)'`
+ * is a constant, not derived from the payload, so naming it costs nothing against
+ * the no-values rule.
+ *
+ * Shared rather than reimplemented: `ipc/register.ts` and `settings.ts` both
+ * needed it and had two copies, which is how one of them kept the empty-string bug
+ * after the other was fixed.
+ */
+export function issuePaths(error: {
+  issues: readonly { path: readonly PropertyKey[] }[]
+}): string[] {
+  return error.issues.map((issue) =>
+    issue.path.length === 0 ? '(root)' : issue.path.join('.'),
+  )
+}

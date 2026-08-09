@@ -1,0 +1,26 @@
+{
+  "title": "Board",
+  "black": "Black",
+  "white": "White",
+  "toPlay": "{{color}} to play",
+  "moveNumber": "Move {{n}}",
+  "pass": "Pass",
+  "captures": "Captures",
+  "capturesBy": "{{count}} captured by {{color}}",
+  "lastMove": "Last move",
+  "showCoordinates": "Show coordinates",
+  "empty": "No game open yet",
+  "nav": {
+    "first": "Back to start",
+    "previous": "Previous move",
+    "next": "Next move",
+    "last": "Jump to end",
+    "hint": "Use the left and right arrow keys to step through moves"
+  },
+  "tree": {
+    "title": "Variations",
+    "mainLine": "Main line",
+    "variation": "Variation {{n}}",
+    "empty": "No variations"
+  }
+}

@@ -1,6 +1,9 @@
 import { Menu, app, shell, type MenuItemConstructorOptions } from 'electron'
+import type { Locale } from '@gomentor/shared'
 import { logsDir } from './paths'
 import { scoped } from './logger'
+import zhCN from '../renderer/src/i18n/locales/zh-CN/common.json'
+import en from '../renderer/src/i18n/locales/en/common.json'
 
 /**
  * Native application menu.
@@ -12,46 +15,59 @@ import { scoped } from './logger'
  * this menu is table stakes; that item is the reason the file exists in M1 rather
  * than being deferred with the rest of the chrome.
  *
- * ## Labels are passed in, not translated here
+ * ## Main translates the menu itself, from the renderer's own JSON
  *
- * The native menu is built in main, but the i18n resources live in the renderer
- * (R10). Rather than duplicate the catalogue into main — where it would drift —
- * the caller supplies already-translated strings. Stage 6 wires the renderer's
- * locale change to a rebuild; until then the defaults below are the fallback,
- * which is why they are English: an untranslated menu is a visible gap, whereas a
- * menu hardcoded to zh-CN would look intentional and never get fixed.
+ * R10: "Main process shares the same JSON for native menu/dialogs." Not a copy —
+ * the literal same files under `renderer/src/i18n/locales/`, imported here. A
+ * missing key is then a TypeScript error at build time rather than a menu item
+ * rendering as `undefined`.
+ *
+ * This replaced a `menu:setLabels` IPC channel that pushed already-translated
+ * labels from the renderer. That design was written on the premise that "only the
+ * renderer knows the locale", and the premise was false: `locale` lives in the
+ * settings document, which main owns, and `index.ts` already reads
+ * `settings.get()` before it builds the menu. Recorded because the channel was
+ * fully built, tested, and documented before the premise was checked — see
+ * `prd.md` R4.
+ *
+ * Keeping translation here also closes a gap the channel could not: the menu is
+ * correct from the first paint, whereas labels arriving over IPC leave the bar in
+ * English until the renderer has mounted and initialised i18n.
  */
-
 const logger = scoped('main:menu')
 
-export interface MenuLabels {
-  file: string
-  openSgf: string
-  quit: string
-  view: string
-  reload: string
-  toggleDevTools: string
-  resetZoom: string
-  zoomIn: string
-  zoomOut: string
-  fullScreen: string
-  help: string
-  revealLogs: string
+/**
+ * The menu's slice of the `common` namespace, per locale.
+ *
+ * Typed as `Record<Locale, ...>` deliberately: `localeSchema` lists six locales
+ * and only two have catalogues in M1 (R10 defers ja/ko/th/vi to M5), so this
+ * would not compile as a total record. `Partial` plus an explicit fallback makes
+ * the gap visible instead of letting a missing locale become a runtime
+ * `undefined` deref — a user whose settings say `ja` gets English, not a crash.
+ */
+const CATALOGUES: Partial<Record<Locale, MenuLabels>> = {
+  'zh-CN': zhCN.menu,
+  en: en.menu,
 }
 
-export const DEFAULT_LABELS: MenuLabels = {
-  file: 'File',
-  openSgf: 'Open SGF…',
-  quit: 'Quit',
-  view: 'View',
-  reload: 'Reload',
-  toggleDevTools: 'Toggle Developer Tools',
-  resetZoom: 'Reset Zoom',
-  zoomIn: 'Zoom In',
-  zoomOut: 'Zoom Out',
-  fullScreen: 'Toggle Full Screen',
-  help: 'Help',
-  revealLogs: 'Reveal Logs',
+/**
+ * The twelve strings this menu needs, derived from the authoring locale's JSON
+ * rather than declared.
+ *
+ * `typeof zhCN.menu` and not a hand-written interface: a hand-written one is a
+ * second description of the same keys, and the two can disagree. This way adding
+ * a key to the JSON without using it is harmless, while *using* a key that no
+ * catalogue has is a compile error.
+ */
+type MenuLabels = typeof zhCN.menu
+
+/**
+ * English, not zh-CN, when a locale has no catalogue. An untranslated menu is a
+ * visible gap that gets reported; a menu silently hardcoded to the authoring
+ * locale looks intentional and never gets fixed.
+ */
+function labelsFor(locale: Locale): MenuLabels {
+  return CATALOGUES[locale] ?? en.menu
 }
 
 export interface MenuActions {
@@ -59,10 +75,8 @@ export interface MenuActions {
   openSgf(): void
 }
 
-export function buildMenu(
-  actions: MenuActions,
-  labels: MenuLabels = DEFAULT_LABELS,
-): Menu {
+export function buildMenu(actions: MenuActions, locale: Locale): Menu {
+  const labels = labelsFor(locale)
   const isMac = process.platform === 'darwin'
 
   const template: MenuItemConstructorOptions[] = [
@@ -143,6 +157,13 @@ export function buildMenu(
   return Menu.buildFromTemplate(template)
 }
 
-export function applyMenu(actions: MenuActions, labels?: MenuLabels): void {
-  Menu.setApplicationMenu(buildMenu(actions, labels))
+/**
+ * Builds and installs the menu for a locale.
+ *
+ * Call it again after a locale change: Electron replaces the whole menu, so
+ * there is no partial-update path to get wrong. `index.ts` calls this on startup
+ * and the settings handler calls it when `locale` changes.
+ */
+export function applyMenu(actions: MenuActions, locale: Locale): void {
+  Menu.setApplicationMenu(buildMenu(actions, locale))
 }

@@ -280,3 +280,52 @@ describe('the secrets field is not reachable from a patch', () => {
     ).toBeUndefined()
   })
 })
+
+describe('an invalid patch is rejected with paths but never values', () => {
+  it('throws SETTINGS_INVALID naming the offending field', () => {
+    const service = createSettingsService(memoryFs(), PATH)
+    try {
+      service.update({ ui: { locale: 'klingon' } })
+      throw new Error('update should have thrown')
+    } catch (error) {
+      // Not `toThrow(/SETTINGS_INVALID/)`: that matches the message, and the
+      // whole point of a domain `code` is that the renderer branches on it
+      // rather than on prose.
+      const failure = error as { code?: string; context?: { issues?: string[] } }
+      expect(failure.code).toBe('SETTINGS_INVALID')
+      expect(failure.context?.issues).toEqual(['ui.locale'])
+    }
+  })
+
+  it('does not put the rejected value in the error', () => {
+    // The realistic leak: a user pastes an API key into the wrong field, the
+    // patch is rejected, and a zod issue quotes what they typed. `issuePaths`
+    // exists to make that impossible; this is the test that keeps it that way.
+    const service = createSettingsService(memoryFs(), PATH)
+    try {
+      service.update({ ui: { theme: 'sk-live-4eC39HqLyjWDarjtT1zdp7dc' } })
+      throw new Error('update should have thrown')
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain('sk-live')
+      const failure = error as { context?: { issues?: string[] } }
+      expect(failure.context?.issues).toEqual(['ui.theme'])
+    }
+  })
+
+  it('reports a top-level field by its name, not as (root)', () => {
+    // A deliberate contrast with the `(root)` case: `version` is a top-level
+    // *field*, so its path is `['version']` and it must be named. `(root)` is
+    // reserved for an issue with an empty path — the value not being an object at
+    // all — which `settingsSchema` cannot produce here because `deepMerge` always
+    // hands it one. That case is covered where it is reachable, at the IPC
+    // boundary (`handlers.test.ts`), against the same shared helper.
+    const service = createSettingsService(memoryFs(), PATH)
+    try {
+      service.update({ version: 'not-a-number' })
+      throw new Error('update should have thrown')
+    } catch (error) {
+      const failure = error as { context?: { issues?: string[] } }
+      expect(failure.context?.issues).toEqual(['version'])
+    }
+  })
+})

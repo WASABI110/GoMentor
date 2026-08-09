@@ -96,7 +96,9 @@ Renderer→main is always `invoke`. Main→renderer uses typed event channels fo
 
 M1 channels (11): `sgf:parse|serialize|openDialog`, `library:list|import`, `llm:sendMessage|cancel`, `settings:get|set|setSecret|hasSecret`.
 
-M1 events (5): `llm:delta|done|error`, `library:changed`, `engine:status`.
+M1 events (6): `llm:delta|done|error`, `library:changed`, `menu:command`, `engine:status`.
+
+The event count was wrong before Stage 6 and is corrected here rather than quietly: it said 5 while `EVENTS` has held six since Stage 2 — `menu:command` was added there and never counted. A stale count is not a harmless typo in this document: the desktop integration suite asserts an explicit channel ledger against `CHANNEL_NAMES`, so a reader reconciling code against this PRD is told the test is over-covering when in fact the prose is behind. Both numbers were re-derived by evaluating `Object.keys` on the real objects, not by counting the lists above.
 
 Three deliberate departures from this requirement's first draft. The first two were settled during Stage 2, the third during Stage 4:
 
@@ -105,6 +107,39 @@ Three deliberate departures from this requirement's first draft. The first two w
 - **The lint rule guards the wrappers, not channel strings.** This requirement first read "forbids raw channel strings outside `ipc.ts`", on the premise that inlined channel names drift silently on rename. Stage 4 measured that premise and it is false: `handle()` and `emit()` are generic over `C extends ChannelName` / `E extends EventName`, so a renamed or mistyped channel is a TS2345 that names every valid channel — the loudest available failure. The rule fired on all 17 already-type-checked call sites, and the remedy it advised — importing a per-channel constant from `@gomentor/shared/ipc` — named an export that does not exist and should not: `CHANNELS` is the contract, and per-channel constants would be a second place for a channel name to live.
 
   What types genuinely cannot express is the invariant the rule now guards. A bare `ipcMain.handle` is perfectly well-typed while silently skipping request validation, response validation, and error-envelope mapping — so a throw would cross the boundary as a stringified `Error` and lose the `code` the renderer translates (`error-handling.md`). That is the drift worth a linter.
+**A withdrawn fourth departure, recorded because the withdrawal is the lesson.** Stage 6 added a `menu:setLabels` channel (renderer → main) so the renderer could push translated menu labels, on the stated premise that "only the renderer knows the locale". The channel was built, tested, mutation-proven, and written up here before that premise was checked. It is false: `locale` lives in `ui.locale` inside the settings document, which **main** owns, and `main/index.ts` already calls `settings.get()` before it builds the menu. R10 had said all along that main shares the same i18n JSON.
+
+The channel and its tests were reverted, and `main/menu.ts` now imports `renderer/src/i18n/locales/<locale>/common.json` directly — literally the same files the renderer uses, so a missing key is a compile error rather than a menu item rendering as `undefined`. Measured after the change: launching the built bundle with `ui.locale` set to `zh-CN` yields a menu bar of `["文件","视图","帮助"]` and with `en` yields `["File","View","Help"]`, from one artifact.
+
+Translating in main is also strictly better than the channel was, for a reason the channel could not fix: the menu is correct on the **first paint**. Labels arriving over IPC cannot land until React has mounted and i18n has initialised, so the bar would show English until then — the very A12 gap the channel was supposed to close.
+
+The generalisable failure was not the wrong design; it was writing a long, confident rationale for a boundary without verifying the factual claim underneath it. Volume of justification reads as evidence and is not. One `grep locale` in `types/settings.ts` would have refuted it before any code existed.
+
+**An amendment to the Stage 2 contract, made in Stage 6 under R12's amend-don't-lower rule.** `gameSchema` gained a required field:
+
+```ts
+setup: gameSetupSchema.prefault({})   // { black: Coord[]; white: Coord[] }
+```
+
+The contract as designed in Stage 2 could describe *play* but not *position*. `Game` carried `meta` and `moves`, and nothing else — so a handicap game's `AB` stones and a life-and-death problem's `AB`/`AW` stones had nowhere to live, and a nine-stone handicap record reached the board with all nine stones missing. That is a direct A3 failure ("renders the correct position for 19×19, 13×13, and 9×9"), and it was invisible to four consecutive green stage gates because nothing yet read a position off a `Game`.
+
+Measured across the 44-file real corpus before choosing the shape, rather than reasoned about:
+
+- **10 files carry `AB`/`AW`.** Four carry white setup stones, one of them 34 — so `HA[]` cannot stand in for the field. A count expresses black stones only, and cannot express *which* points.
+- **Three setup-bearing files declare no `HA` at all** (`gnugo-ko6-jago`, `sabaki-sgf-no-ca`, `katago-sampletest9x9`), which independently rules out deriving setup from `meta.handicap`.
+- **Every mainline setup node in the corpus occurs before move 1.** This is what bounds the fix to an initial position instead of a general position-at-node model.
+- **All four `AE` (remove-stone) nodes are off-mainline**, so `AE` is deliberately not applied.
+- **Replaying the whole corpus from setup produces zero rule violations**, which is the evidence that the projection is faithful rather than merely type-correct.
+
+The accepted bound, stated rather than hidden: a file that places stones *mid*-mainline replays without them. That is the same move-tree limitation already recorded elsewhere, not a new one.
+
+Setup is deliberately **not** folded into `moves`. Doing so would shift every move number by the number of setup stones and hand move 1 to the wrong player — a handicap game's first played move is white's.
+
+Two further consequences worth recording, because each was a hole a gate had not caught:
+
+- `state-management.md` names `board/position.ts` as the module that "replays moves". It did not, and no replay function existed anywhere in the repo. `replay(game, moveNumber)` was added there, returning a `stopped` record rather than throwing: a record whose move 137 is illegal still has 136 good moves, and refusing the whole file would be worse than showing 136. Silently skipping the bad move would be worse still — a wrong board looks exactly as authoritative as a right one.
+- **A corpus-wide test that reimplements its subject cannot guard its subject.** `packages/core/test/board/replay.test.ts` sweeps all 44 fixtures, but built its input with a local copy of the projection. Measured: replacing `setup: toSetup(...)` with `setup: { black: [], white: [] }` in the *shipping* adapter left **784 tests green** — the exact defect above would have shipped with a corpus-wide test file sitting next to it. `apps/desktop/test/unit/sgf-adapter.test.ts` now drives the real `toGame`, deriving every expectation from each fixture's own properties rather than from a transcribed board; the same mutation now produces 21 failures, a root-only read produces 1, and dropping white setup alone produces 6.
+
 
 ### R5 — SGF pipeline
 Parse SGF → `GameTree` AST with stable node ids and parent/child links. Typed, zod-validated property accessors. Serialize back with correct escaping. **Unknown properties preserved byte-for-byte.** Typed errors (never hangs) on truncated, empty, or non-SGF input.
@@ -127,6 +162,19 @@ Resizable three-panel shell (game library / board + move nav / teacher chat), la
 
 ### R10 — i18n foundation
 `zh-CN` (authoring locale) and `en` complete for all M1 surface. Namespaced JSON. Main process shares the same JSON for native menu/dialogs. CI fails on keys missing relative to `en`. Remaining locales (ja/ko/th/vi) deferred to M5.
+
+**Amended in Stage 6 (R12's amend-don't-lower rule): "keys missing relative to `en`" is not a sufficient gate.**
+
+Key-set comparison passes for a locale file whose keys are all present and whose **values are copied from `en`** — which is the untranslated state A12 exists to forbid. Measured rather than argued: overwriting five of the six `zh-CN` catalogues with their `en` counterparts — every error message, the whole settings panel, all teacher and board and analysis text in English — left the i18n gate at **40/40 and the full suite at 914/914**. Only `common.json` was caught, and only incidentally, by two `locale selection` cases that happen to spot-check particular keys; the five namespaces with no spot-check were invisible.
+
+The gate now also rejects values identical to `en` outside an enumerated allowlist of 11 key paths — the product name, six endonyms (each language named in its own language), and four KataGo backend names (`TensorRT`, `CUDA`, `OpenCL`, `CPU (Eigen)`), which must match what the engine itself reports. The allowlist is pinned to an exact count by its own test, because growing it is the one way to silently disable the check. Re-running the same mutation now fails five tests, each naming its namespace.
+
+Two claims made in an earlier draft of this amendment were **wrong and are corrected here rather than deleted**, since the error is the same class as R4's withdrawn fourth departure — writing a confident rationale without checking the fact under it:
+
+- "`check:i18n` had no implementation behind it" — false. `scripts/check-i18n.ts` exists and runs; it deliberately delegates to the test suite rather than re-implementing the comparison. (Its doc comment does record that the script was once a missing file, which is presumably what the draft was remembering.)
+- "the gate only compares one direction" — false. `i18n.test.ts` has asserted both directions since it was written, with the reasoning stated in place.
+
+One real inaccuracy found while checking: `scripts/check-i18n.ts` names the suite as `apps/desktop/test/unit/i18n.test.ts`, but it lives at `apps/desktop/test/renderer/i18n.test.ts`. The script's filter (`--project desktop … i18n`) matches by pattern, so the gate does run — the comment is stale, not the code.
 
 ### R11 — CI
 Three-OS matrix (windows-latest, macos-latest arm64, ubuntu-latest) × Node 22 LTS: install (frozen lockfile) → lint → typecheck → test with coverage → package unsigned → upload artifacts. Plus lockfile-drift check, dependency-license gate (must be GPL-3.0-compatible per D4), i18n key completeness, and the R2 Trellis-immutability guard.

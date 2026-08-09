@@ -1,0 +1,40 @@
+{
+  "title": "分析",
+  "engine": {
+    "label": "引擎",
+    "status": {
+      "unavailable": "不可用",
+      "downloading": "下载中",
+      "starting": "启动中",
+      "ready": "就绪",
+      "failed": "启动失败"
+    },
+    "backend": {
+      "tensorrt": "TensorRT",
+      "cuda": "CUDA",
+      "opencl": "OpenCL",
+      "eigen": "CPU (Eigen)"
+    },
+    "downloadProgress": "已下载 {{percent}}%",
+    "visitsPerSecond": "{{n}} 次/秒",
+    "network": "权重:{{name}}",
+    "unavailableHint": "没有引擎也可以正常打谱与提问,只是暂时没有胜率分析。"
+  },
+  "winrate": "胜率",
+  "scoreLead": "目差",
+  "visits": "计算量",
+  "bestMove": "推荐着点",
+  "ownership": "势力图",
+  "phase": {
+    "opening": "布局",
+    "middlegame": "中盘",
+    "endgame": "收官"
+  },
+  "delta": {
+    "title": "这一手的得失",
+    "loss": "损失 {{points}} 目",
+    "gain": "领先 {{points}} 目",
+    "even": "与推荐着点相当"
+  },
+  "empty": "还没有分析结果"
+}

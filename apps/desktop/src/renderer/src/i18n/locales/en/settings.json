@@ -1,0 +1,70 @@
+{
+  "title": "Settings",
+  "section": {
+    "ui": "Interface",
+    "llm": "AI Teacher",
+    "engine": "Analysis Engine",
+    "library": "Library",
+    "privacy": "Privacy"
+  },
+  "ui": {
+    "locale": "Language",
+    "theme": "Theme",
+    "themeOption": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "Match system"
+    },
+    "showCoordinates": "Show board coordinates",
+    "animationsEnabled": "Enable animations"
+  },
+  "llm": {
+    "kind": "Provider",
+    "kindOption": {
+      "cloud": "Cloud API",
+      "local": "Local model"
+    },
+    "baseUrl": "Endpoint",
+    "model": "Model",
+    "apiKey": "API key",
+    "apiKeySet": "Saved",
+    "apiKeyUnset": "Not set",
+    "apiKeyPlaceholder": "Paste a key to save it — it will not be shown again",
+    "clearKey": "Clear key",
+    "temperature": "Randomness",
+    "maxTokens": "Maximum reply length",
+    "toolsSupported": "Tool calls",
+    "toolsUnknown": "Not probed yet",
+    "toolsYes": "Supported",
+    "toolsNo": "Not supported"
+  },
+  "engine": {
+    "backend": "Compute backend",
+    "backendAuto": "Detect automatically",
+    "binaryPath": "Engine path",
+    "binaryPathDefault": "Use the bundled engine",
+    "networkPath": "Network weights",
+    "maxVisits": "Visits per move",
+    "threads": "Threads",
+    "analyzeOwnership": "Compute territory map"
+  },
+  "library": {
+    "roots": "Watched folders",
+    "rootsEmpty": "No folders added yet",
+    "addRoot": "Add folder…",
+    "removeRoot": "Remove",
+    "watchEnabled": "Import new games automatically"
+  },
+  "privacy": {
+    "telemetryConsent": "Send anonymous usage statistics",
+    "telemetryHint": "Off by default. Crashes and feature counts only — never game records, chat, or keys.",
+    "debugLogging": "Enable debug logging",
+    "debugHint": "Turn this on when investigating a problem. Logs stay on this machine.",
+    "revealLogs": "Open log folder"
+  },
+  "encryptionUnavailable": {
+    "title": "The key cannot be stored securely",
+    "body": "This machine offers no system encrypted storage, so the key lasts only for this session and must be entered again after a restart."
+  },
+  "saved": "Saved"
+}

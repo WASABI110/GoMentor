@@ -1,0 +1,40 @@
+{
+  "title": "Analysis",
+  "engine": {
+    "label": "Engine",
+    "status": {
+      "unavailable": "unavailable",
+      "downloading": "downloading",
+      "starting": "starting",
+      "ready": "ready",
+      "failed": "failed"
+    },
+    "backend": {
+      "tensorrt": "TensorRT",
+      "cuda": "CUDA",
+      "opencl": "OpenCL",
+      "eigen": "CPU (Eigen)"
+    },
+    "downloadProgress": "{{percent}}% downloaded",
+    "visitsPerSecond": "{{n}}/s",
+    "network": "Network: {{name}}",
+    "unavailableHint": "You can still review games and ask questions without an engine — only win-rate analysis is unavailable."
+  },
+  "winrate": "Win rate",
+  "scoreLead": "Score lead",
+  "visits": "Visits",
+  "bestMove": "Suggested move",
+  "ownership": "Territory",
+  "phase": {
+    "opening": "Opening",
+    "middlegame": "Middlegame",
+    "endgame": "Endgame"
+  },
+  "delta": {
+    "title": "Cost of this move",
+    "loss": "{{points}} points lost",
+    "gain": "{{points}} points ahead",
+    "even": "As good as the suggested move"
+  },
+  "empty": "No analysis yet"
+}

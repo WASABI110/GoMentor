@@ -1,0 +1,24 @@
+{
+  "title": "AI 教师",
+  "placeholder": "问问这一手为什么不好…",
+  "send": "发送",
+  "stop": "停止",
+  "thinking": "正在思考…",
+  "empty": "打开一局棋,然后问我任何问题。",
+  "role": {
+    "user": "我",
+    "assistant": "教师"
+  },
+  "cancelled": "已停止回答。",
+  "noKey": {
+    "title": "还没有配置 AI 教师",
+    "body": "在设置中填入 API 密钥,或指向一个本地模型服务。",
+    "action": "打开设置"
+  },
+  "suggestion": {
+    "title": "可以这样问",
+    "whyBad": "我这一手为什么不好?",
+    "whatNow": "现在该怎么下?",
+    "explainShape": "解释一下这个棋形"
+  }
+}

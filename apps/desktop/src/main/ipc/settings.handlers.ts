@@ -2,6 +2,7 @@ import { handle } from './register'
 import { scoped, setDebugEnabled } from '../logger'
 import type { SettingsService } from '../settings'
 import type { SecretsService } from '../safe-storage'
+import type { Locale } from '@gomentor/shared'
 
 /**
  * Settings and secret channels.
@@ -25,6 +26,7 @@ const logger = scoped('main:settings')
 export function registerSettingsHandlers(
   settings: SettingsService,
   secrets: SecretsService,
+  relabelMenu: (locale: Locale) => void,
 ): void {
   handle('settings:get', () => {
     const document = settings.get()
@@ -40,12 +42,24 @@ export function registerSettingsHandlers(
   })
 
   handle('settings:set', (request) => {
+    const previousLocale = settings.get().ui.locale
     const updated = settings.update(request.patch)
 
     // Debug logging is toggleable at runtime precisely so a user can produce a
     // useful log without a rebuild (`logging-guidelines.md`). Applying it here,
     // at the write, is what makes that immediate rather than next-launch.
     setDebugEnabled(updated.debugLogging)
+
+    // The native menu is translated in main from the same JSON the renderer uses
+    // (R10), so a locale change has to rebuild it here — the renderer cannot, and
+    // nothing else will. Compared against the *pre-update* document rather than
+    // keyed off `request.patch.locale` being present: a patch that sets locale to
+    // the value it already had would otherwise rebuild the menu for nothing, and
+    // a patch that changes locale via a deep merge the handler cannot see would
+    // otherwise be missed.
+    if (updated.ui.locale !== previousLocale) {
+      relabelMenu(updated.ui.locale)
+    }
 
     // Keys, not values: a patch can contain a `baseUrl`, and settings are the
     // one place a user might paste a key into the wrong field.

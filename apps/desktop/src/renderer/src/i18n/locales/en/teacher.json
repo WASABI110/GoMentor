@@ -1,0 +1,24 @@
+{
+  "title": "AI Teacher",
+  "placeholder": "Ask why that move was a mistake…",
+  "send": "Send",
+  "stop": "Stop",
+  "thinking": "Thinking…",
+  "empty": "Open a game, then ask me anything.",
+  "role": {
+    "user": "You",
+    "assistant": "Teacher"
+  },
+  "cancelled": "Response stopped.",
+  "noKey": {
+    "title": "The teacher is not set up yet",
+    "body": "Add an API key in settings, or point it at a local model server.",
+    "action": "Open settings"
+  },
+  "suggestion": {
+    "title": "Try asking",
+    "whyBad": "Why was that move a mistake?",
+    "whatNow": "What should I play now?",
+    "explainShape": "Explain this shape"
+  }
+}

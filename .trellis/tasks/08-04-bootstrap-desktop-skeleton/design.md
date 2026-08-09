@@ -72,17 +72,23 @@ CHANNELS = {
   'llm:sendMessage':    { request, response }   // returns { runId }; tokens arrive on events
   'llm:cancel':         { request, response }
   'settings:get':       { request, response }
-  'settings:set':       { request, response }
+  'settings:set':       { request, response }   // responds with the whole document; no settings:changed event
   'settings:setSecret': { request, response }
   'settings:hasSecret': { request, response }
 }
 
 EVENTS = {
-  'llm:delta' | 'llm:toolCall' | 'llm:done' | 'llm:error'
+  'llm:delta' | 'llm:done' | 'llm:error'
   'library:changed'
+  'menu:command'      // main asks the renderer to run a flow the renderer owns
+  'engine:status'
   // M2: 'katago:analysis' | 'katago:status'   M5: 'update:status'
 }
 ```
+
+This sketch drifted twice and is corrected here rather than silently. It listed `llm:toolCall`, which Stage 2 refuted and removed — tool-call fragments ride inside `llm:delta` as a variant of `chatChunkSchema`'s union (see `prd.md` R4). It omitted `engine:status` and `menu:command`, both live since Stage 2. `packages/shared/src/ipc.ts` is the contract; this block is a reading aid, and the counts in `prd.md` R4 were re-derived from `Object.keys` on the real objects rather than by counting either list.
+
+Note that there is **no** channel for menu labels. Stage 6 briefly added one and reverted it: main translates the native menu itself from `renderer/src/i18n/locales/`, which is what R10 specifies and is what makes the menu correct on the first paint. See `prd.md` R4, "A withdrawn fourth departure".
 
 **Enforcement mechanism**: `ipc/register.ts` exposes a single `handle(channel, handler)` helper that parses the request against the channel's schema before invoking the handler, maps thrown errors to a typed error envelope, and — **in dev builds only** — also parses the response. Fail loud in dev, fast in prod. A `no-restricted-syntax` ESLint rule forbids reaching past the wrappers to Electron's IPC primitives (`ipcMain.handle`, `webContents.send`) outside `register.ts` and `events.ts`. This sentence originally said the rule forbade raw channel string literals outside `ipc.ts`, "so drift is caught at lint time rather than runtime"; Stage 4 measured that premise and it is false — the wrappers are generic over `ChannelName`, so a mistyped channel is already a TS2345 naming every valid channel, and the rule fired on 17 correct call sites while advising an import that does not exist. What types cannot express is the primitive-bypass above: `ipcMain.handle` is well-typed and silently skips validation and envelope mapping. See `prd.md` R4 and the comment in `eslint.config.js`.
 

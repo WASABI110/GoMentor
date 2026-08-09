@@ -1,0 +1,49 @@
+{
+  "appName": "GoMentor",
+  "loading": "Loading…",
+  "cancel": "Cancel",
+  "confirm": "OK",
+  "close": "Close",
+  "retry": "Retry",
+  "save": "Save",
+  "delete": "Delete",
+  "empty": "Nothing here yet",
+  "localeName": {
+    "zh-CN": "简体中文",
+    "en": "English",
+    "ja": "日本語",
+    "ko": "한국어",
+    "th": "ไทย",
+    "vi": "Tiếng Việt"
+  },
+  "library": {
+    "title": "Library",
+    "empty": "No games yet — drop an SGF file here to import it.",
+    "import": "Import games…",
+    "count": "{{count}} games",
+    "searchPlaceholder": "Search players, dates…",
+    "column": {
+      "players": "Players",
+      "date": "Date",
+      "result": "Result",
+      "size": "Board"
+    },
+    "unknownPlayer": "Unknown",
+    "unknownDate": "Date unknown",
+    "unknownResult": "Result unknown"
+  },
+  "menu": {
+    "file": "File",
+    "openSgf": "Open SGF…",
+    "quit": "Quit",
+    "view": "View",
+    "reload": "Reload",
+    "toggleDevTools": "Toggle Developer Tools",
+    "resetZoom": "Reset Zoom",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "fullScreen": "Toggle Full Screen",
+    "help": "Help",
+    "revealLogs": "Reveal Logs"
+  }
+}

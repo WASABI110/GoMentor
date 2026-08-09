@@ -84,6 +84,19 @@ if (!gotLock) {
       logger.warn('OS encryption unavailable; secrets will be session-only')
     }
 
+    // The menu's actions, named so both the startup build and a later locale
+    // change use the same closures. Inlining them at each call site would put the
+    // openSgf handler in two places, and "which callback is the live menu using?"
+    // would have two possible answers.
+    const menuActions = {
+      openSgf: () => {
+        // The menu asks the *renderer* to run its open flow rather than opening
+        // the dialog here. Otherwise the accelerator and the in-app button would
+        // be two paths to the same feature, and they would drift.
+        emit('menu:command', { command: 'openSgf' })
+      },
+    }
+
     // Before the window: the renderer calls settings:get on mount.
     registerAllHandlers({
       store: created.store,
@@ -91,18 +104,21 @@ if (!gotLock) {
       secrets: created.secrets,
       llm: created.llm,
       now: () => new Date().toISOString(),
-    })
-
-    createWindow(created.settings)
-
-    applyMenu({
-      openSgf: () => {
-        // The menu asks the *renderer* to run its open flow rather than opening
-        // the dialog here. Otherwise the accelerator and the in-app button would
-        // be two paths to the same feature, and they would drift.
-        emit('menu:command', { command: 'openSgf' })
+      // A locale change rebuilds the whole menu rather than patching labels:
+      // Electron replaces the menu wholesale, so there is no partial-update path
+      // to get wrong.
+      relabelMenu: (locale) => {
+        applyMenu(menuActions, locale)
       },
     })
+
+    // Translated from the user's stored locale, so the menu is correct on the
+    // first paint. This is what the deleted `menu:setLabels` channel could not do:
+    // labels pushed from the renderer could not arrive until React had mounted and
+    // i18n had initialised, leaving the bar in English until then.
+    applyMenu(menuActions, created.settings.get().ui.locale)
+
+    createWindow(created.settings)
 
     app.on('activate', () => {
       // macOS: clicking the dock icon with no windows open should reopen one.

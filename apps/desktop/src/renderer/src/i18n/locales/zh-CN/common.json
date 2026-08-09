@@ -1,0 +1,49 @@
+{
+  "appName": "GoMentor",
+  "loading": "加载中…",
+  "cancel": "取消",
+  "confirm": "确定",
+  "close": "关闭",
+  "retry": "重试",
+  "save": "保存",
+  "delete": "删除",
+  "empty": "暂无内容",
+  "localeName": {
+    "zh-CN": "简体中文",
+    "en": "English",
+    "ja": "日本語",
+    "ko": "한국어",
+    "th": "ไทย",
+    "vi": "Tiếng Việt"
+  },
+  "library": {
+    "title": "棋谱库",
+    "empty": "还没有棋谱,把 SGF 文件拖进来即可导入。",
+    "import": "导入棋谱…",
+    "count": "共 {{count}} 局",
+    "searchPlaceholder": "搜索对局者、日期…",
+    "column": {
+      "players": "对局",
+      "date": "日期",
+      "result": "结果",
+      "size": "棋盘"
+    },
+    "unknownPlayer": "未知",
+    "unknownDate": "日期不明",
+    "unknownResult": "结果不明"
+  },
+  "menu": {
+    "file": "文件",
+    "openSgf": "打开 SGF…",
+    "quit": "退出",
+    "view": "视图",
+    "reload": "重新加载",
+    "toggleDevTools": "开发者工具",
+    "resetZoom": "重置缩放",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fullScreen": "全屏",
+    "help": "帮助",
+    "revealLogs": "打开日志目录"
+  }
+}

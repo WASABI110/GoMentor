@@ -4,6 +4,7 @@ import { registerSgfHandlers } from './sgf.handlers'
 import { registerLibraryHandlers } from './library.handlers'
 import { registerSettingsHandlers } from './settings.handlers'
 import { registerLlmHandlers } from './llm.handlers'
+import type { Locale } from '@gomentor/shared'
 import type { GameStore } from '../library/store'
 import type { LlmService } from '../llm/service'
 import type { SecretsService } from '../safe-storage'
@@ -29,6 +30,16 @@ export interface Dependencies {
    * `importedAt` otherwise makes every expected value a moving target.
    */
   now: () => string
+  /**
+   * Rebuilds the native menu for a locale. Called by the settings handler when a
+   * patch changes `locale`, since main owns the menu and translates it itself
+   * (R10) — there is no renderer round-trip.
+   *
+   * Injected for the same reason as `now`: the real one calls
+   * `Menu.setApplicationMenu`, which needs a running app, so a handler test would
+   * otherwise require a live Electron.
+   */
+  relabelMenu: (locale: Locale) => void
 }
 
 export function registerAllHandlers(deps: Dependencies): void {
@@ -38,7 +49,7 @@ export function registerAllHandlers(deps: Dependencies): void {
 
   registerSgfHandlers(deps.store, deps.now)
   registerLibraryHandlers(deps.store, deps.now)
-  registerSettingsHandlers(deps.settings, deps.secrets)
+  registerSettingsHandlers(deps.settings, deps.secrets, deps.relabelMenu)
   registerLlmHandlers(deps.llm)
 }
 

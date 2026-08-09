@@ -1,5 +1,4 @@
 import { ipcMain } from 'electron'
-import { z } from 'zod'
 import {
   CHANNELS,
   isAppError,
@@ -10,6 +9,7 @@ import {
   type IpcResult,
 } from '@gomentor/shared'
 import { scoped } from '../logger'
+import { issuePaths } from '../redact'
 
 /**
  * The one way an IPC handler is registered.
@@ -81,16 +81,6 @@ function toEnvelope(error: unknown): ErrorEnvelope {
     // as primary UI text (`error-handling.md` line 65).
     message: 'The operation failed',
   }
-}
-
-/**
- * Formats zod issues for a log line. Paths only, no values: a rejected
- * `settings:setSecret` request contains the secret, and its zod issue would
- * quote it. This is the one place where logging the "helpful" detail would leak
- * the exact thing `logging-guidelines.md` forbids.
- */
-function issuePaths(error: z.ZodError): string[] {
-  return error.issues.map((issue) => issue.path.join('.'))
 }
 
 /**

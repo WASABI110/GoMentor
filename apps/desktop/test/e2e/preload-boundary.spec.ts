@@ -1,11 +1,5 @@
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-} from '@playwright/test'
+import { expect, test, type ElectronApplication } from '@playwright/test'
+import { firstPage, launchApp } from './harness'
 
 /**
  * Stage 5's gate, as a test: the preload boundary is a **security boundary**, not
@@ -31,47 +25,23 @@ import {
  * `typeof window.require` read from the test process would describe the test
  * process. These assertions are evaluated in the renderer's own context via
  * `page.evaluate`, which is the only place the question means anything.
+ *
+ * ## Why the launch details are not here
+ *
+ * They live in `harness.ts`, each with the measurement that produced it — the
+ * `ELECTRON_RUN_AS_NODE` omission, the built-bundle precondition, and the load
+ * wait. This spec deliberately does not restate them; Stage 6 adds five more
+ * specs, and a launch detail explained in six places is a launch detail that will
+ * disagree with itself.
  */
-
-const OUT_MAIN = join(__dirname, '..', '..', 'out', 'main', 'index.js')
 
 let app: ElectronApplication
 
 test.beforeAll(async () => {
-  // A pointed failure beats a missing-file stack from deep inside Playwright.
-  // `pnpm --filter @gomentor/desktop build` is the precondition, not this test's
-  // job — building here would make a slow test slower and hide which step broke.
-  if (!existsSync(OUT_MAIN)) {
-    throw new Error(
-      `Built main bundle not found at ${OUT_MAIN}. ` +
-        'Run `pnpm --filter @gomentor/desktop build` first.',
-    )
-  }
-
-  // Electron-based editors and terminals leak ELECTRON_RUN_AS_NODE into their
-  // integrated shells; with it set, the binary boots as plain Node and `app` is
-  // undefined. `electron.vite.config.ts` deletes it for `dev`, and the same hazard
-  // applies to a test launch — measured: without this the launch fails with
-  // "Cannot read properties of undefined (reading 'handle')".
-  //
-  // Rebuilt by omission rather than `env: { ...process.env, ELECTRON_RUN_AS_NODE:
-  // undefined }`: under `exactOptionalPropertyTypes` that assignment is a type
-  // error, and it would be the wrong thing anyway — Playwright's `env` is
-  // `Record<string, string>`, so the value would arrive as the *string*
-  // "undefined", which is truthy to Electron and would trigger exactly the
-  // failure this guards against.
-  const { ELECTRON_RUN_AS_NODE: _asNode, ...cleanEnv } = process.env
-
-  app = await electron.launch({
-    args: [OUT_MAIN],
-    // The spread narrows `string | undefined` values away: `process.env` entries
-    // are optional, and Playwright wants a `Record<string, string>`.
-    env: Object.fromEntries(
-      Object.entries(cleanEnv).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    ),
-  })
+  // No isolated `userDataDir`: nothing here writes settings or secrets, and the
+  // default profile is what a user actually runs. A2's restart spec is the one
+  // that needs isolation, and it asks for it explicitly.
+  app = await launchApp()
 })
 
 test.afterAll(async () => {
@@ -83,11 +53,10 @@ test.afterAll(async () => {
 test('the shipped window has the security flags set in main, not just in this test', async () => {
   // `getLastWebPreferences()` returns null until the window has actually loaded —
   // it reports the preferences of the *last committed* navigation, not the ones
-  // passed to the constructor. Awaiting the page first is what makes it non-null;
-  // without this the assertion fails against `null` and says nothing about the
-  // flags.
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  // passed to the constructor. `firstPage` awaiting the load is what makes it
+  // non-null; without that the assertion fails against `null` and says nothing
+  // about the flags.
+  await firstPage(app)
 
   const prefs = await app.evaluate(({ BrowserWindow }) => {
     const [win] = BrowserWindow.getAllWindows()
@@ -145,8 +114,7 @@ test('the shipped window has the security flags set in main, not just in this te
 })
 
 test('no Node API is reachable from the page', async () => {
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await firstPage(app)
 
   const reachable = await page.evaluate(() => ({
     ipcRenderer: typeof (window as unknown as Record<string, unknown>)['ipcRenderer'],
@@ -170,8 +138,7 @@ test('no Node API is reachable from the page', async () => {
 })
 
 test('the bridge is immutable from the page and exposes exactly the contract', async () => {
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await firstPage(app)
 
   /**
    * ## What this test does and does not attribute to our code
@@ -253,8 +220,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
 })
 
 test('an error crosses the bridge as data with its code intact', async () => {
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await firstPage(app)
 
   /**
    * Sending a chat message with no API key configured is the real, reachable
@@ -336,8 +302,7 @@ test('an error crosses the bridge as data with its code intact', async () => {
 })
 
 test('a malformed request is rejected at the boundary, naming the field but not its value', async () => {
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await firstPage(app)
 
   // The renderer is typed, so this shape is a compile error at any honest call
   // site — hence the cast, and hence the value of the test: it proves what
@@ -372,8 +337,7 @@ test('a malformed request is rejected at the boundary, naming the field but not 
 })
 
 test('an event subscription delivers the payload, and the returned function stops delivery', async () => {
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await firstPage(app)
 
   /**
    * Emits `engine:status` from the main process, which is the only side that can.

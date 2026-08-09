@@ -227,3 +227,131 @@ export class Position {
     return this.stones.reduce((n, s) => (s === null ? n : n + 1), 0)
   }
 }
+
+/**
+ * Why `stopped` exists instead of `replay` throwing.
+ *
+ * A record whose move 137 is illegal is still a record with 136 good moves in
+ * it. Throwing would make the whole game unopenable over one bad move, which is
+ * the opposite of what a study tool should do with a real-world file — and the
+ * corpus is full of files written by clients that disagree about the rules.
+ * Silently skipping the move is worse still: the board would then be wrong from
+ * that point on with nothing to say so, and a wrong board looks exactly as
+ * authoritative as a right one.
+ *
+ * So replay stops, reports where, and hands back the last position it can vouch
+ * for. The caller decides what to tell the user; `reason` carries the rule that
+ * was broken so the UI can say which.
+ */
+export interface ReplayStop {
+  /** 1-based number of the move that could not be played. */
+  moveNumber: number
+  reason: RuleError['reason']
+}
+
+export interface ReplayResult {
+  position: Position
+  /** How many moves were actually applied — less than requested iff `stopped`. */
+  applied: number
+  /**
+   * The last stone placed, for the last-move marker. `null` after a pass or when
+   * no move was applied, which the marker must treat as "draw nothing" rather
+   * than as (0,0).
+   */
+  lastMove: { coord: Coord; player: Player } | null
+  /** Stones the last applied move captured, for the capture animation. */
+  captured: Coord[]
+  /** Absent when every requested move was legal. */
+  stopped?: ReplayStop
+}
+
+/**
+ * A record's mainline, as delivered over IPC. Structurally typed rather than
+ * importing `Game` from `@gomentor/shared` so `packages/core` keeps depending on
+ * the *domain*, not on a transport payload — a `Game` gains transport-only fields
+ * (`contentHash`, `importedAt`, `filePath`) that replay has no business seeing,
+ * and a `Game` satisfies this shape, so callers pass one directly.
+ */
+export interface ReplayInput {
+  meta: { boardSize: BoardSize }
+  setup: { black: readonly Coord[]; white: readonly Coord[] }
+  moves: readonly { player: Player; coord: Coord | null }[]
+}
+
+/**
+ * The position after `moveNumber` moves of a record.
+ *
+ * `moveNumber` is a **count**, matching `Move.number`: 0 is the board before any
+ * move — which is not necessarily empty, since setup stones are position rather
+ * than play — and `moves.length` is the final position.
+ *
+ * ## Setup stones come from `setup`, never from `moves`
+ *
+ * A handicap game's stones are placed, not played. They arrive in
+ * `Game.setup` (`gameSchema` records why they cannot be derived from `handicap`)
+ * and go down through `Position.setup`, which does no capture resolution — nine
+ * stones on the star points capture nothing, and running them through `place`
+ * would also make the first one belong to move 1.
+ *
+ * ## Replayed from the start every time, not incrementally
+ *
+ * A cursor moving one step forward could in principle apply one move to the
+ * previous position. This does not, and the reason is aliasing: stepping
+ * backwards has no inverse — captures cannot be un-resolved — so a backward step
+ * needs a replay anyway, and keeping one code path means forward and backward
+ * cannot disagree. Cost was measured rather than assumed before accepting it; see
+ * `test/board/replay.test.ts`, which asserts a bound on a full-length game so the
+ * claim fails if it stops holding.
+ */
+export function replay(game: ReplayInput, moveNumber: number): ReplayResult {
+  // Clamped rather than rejected: `moveNumber` is a UI cursor, and an
+  // out-of-range cursor is a state to correct, not a reason to render nothing.
+  // `Math.trunc` because a fractional cursor would otherwise slice unpredictably.
+  const target = Math.max(0, Math.min(Math.trunc(moveNumber), game.moves.length))
+
+  let position = Position.empty(game.meta.boardSize).setup([
+    ...game.setup.black.map((coord) => ({ coord, player: 'black' as const })),
+    ...game.setup.white.map((coord) => ({ coord, player: 'white' as const })),
+  ])
+
+  let lastMove: ReplayResult['lastMove'] = null
+  let captured: Coord[] = []
+
+  for (let i = 0; i < target; i += 1) {
+    const move = game.moves[i]
+    // `moves` is `readonly [...]`, so an index below `target` is in range. The
+    // check is here because `noUncheckedIndexedAccess` types it as possibly
+    // undefined, and narrowing it is honest where `!` would only silence it.
+    if (move === undefined) break
+
+    if (move.coord === null) {
+      // A pass. It clears the last-move marker — there is no stone to mark — and
+      // resets ko, which `place` also does on the next real move.
+      lastMove = null
+      captured = []
+      continue
+    }
+
+    try {
+      const result = position.place(move.coord, move.player)
+      position = result.position
+      lastMove = { coord: move.coord, player: move.player }
+      captured = result.captured
+    } catch (error) {
+      if (error instanceof RuleError) {
+        return {
+          position,
+          applied: i,
+          lastMove,
+          captured,
+          // 1-based, matching `Move.number`, so a message can name the move the
+          // user sees in the move list rather than an array index.
+          stopped: { moveNumber: i + 1, reason: error.reason },
+        }
+      }
+      throw error
+    }
+  }
+
+  return { position, applied: target, lastMove, captured }
+}

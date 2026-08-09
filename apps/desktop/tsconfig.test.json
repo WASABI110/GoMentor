@@ -30,6 +30,12 @@
   },
   // e2e is Playwright's, and it needs `DOM` in `lib` for the `page.evaluate`
   // callbacks — see `tsconfig.e2e.json`, which checks those files.
+  //
+  // `test/renderer/**` is excluded for the mirror-image reason: those tests
+  // exercise renderer modules that reach `window.gomentor`, so they need `DOM`,
+  // which this project deliberately lacks — main has no `window` at runtime and a
+  // main-process test referencing one must not compile. See
+  // `tsconfig.renderer-test.json`.
   "include": ["test/**/*.ts"],
-  "exclude": ["test/e2e/**"]
+  "exclude": ["test/e2e/**", "test/renderer/**"]
 }

@@ -7,6 +7,7 @@ import {
   type Settings,
 } from '@gomentor/shared'
 import { scoped } from './logger'
+import { issuePaths } from './redact'
 import { settingsFile } from './paths'
 import type { SecretStore } from './safe-storage'
 
@@ -218,7 +219,7 @@ export function createSettingsService(
       const result = settingsSchema.safeParse(candidate)
       if (!result.success) {
         throw new AppError('SETTINGS_INVALID', 'The settings patch is not valid', {
-          context: { issues: result.error.issues.map((issue) => issue.path.join('.')) },
+          context: { issues: issuePaths(result.error) },
         })
       }
       document = deepMerge(candidate, result.data)
