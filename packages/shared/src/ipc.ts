@@ -11,9 +11,11 @@ import { errorEnvelopeSchema } from './types/errors'
  *
  * Rules this file exists to enforce:
  *
- * - Channel names are `domain:verb`. A lint rule forbids inlining these
- *   strings anywhere else, because a renamed channel would otherwise drift
- *   silently.
+ * - Channel names are `domain:verb`. Inlining one at a call site is safe — the
+ *   wrappers are generic over `ChannelName`/`EventName`, so a renamed channel
+ *   is a compile error, not silent drift. What the lint rule guards instead is
+ *   reaching past those wrappers to `ipcMain.handle`/`webContents.send`, which
+ *   typechecks fine while skipping validation and error mapping (R4).
  * - `register.ts` validates every request against its schema before calling
  *   the handler, and validates responses in dev builds only — fail loud in
  *   dev, fast in prod.

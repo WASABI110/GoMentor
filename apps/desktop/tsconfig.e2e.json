@@ -1,0 +1,35 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `DOM` is here and absent from `tsconfig.test.json`: these specs contain
+    // code that runs *in the page* via `page.evaluate`, so `window` and
+    // `document` are real. The callbacks are compiled as part of this file even
+    // though they execute in another process, and without `DOM` every one of
+    // them would be a type error.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // `electron` as well as `node`: `app.evaluate(({ BrowserWindow }) => …)`
+    // runs its callback in the *main* process, and Playwright types that
+    // parameter from Electron's own module. Without it every property on
+    // `BrowserWindow` and `webContents` resolves to `any`, which
+    // `strictTypeChecked` reports as "unsafe member access on a type that cannot
+    // be resolved" — and which would otherwise let a spec assert on a
+    // `webPreferences` field that does not exist and still pass.
+    "types": ["node", "electron"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@gomentor/shared": ["../../packages/shared/src/index.ts"],
+      "@gomentor/shared/*": ["../../packages/shared/src/*"],
+      "@gomentor/core": ["../../packages/core/src/index.ts"],
+      "@gomentor/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  // `src/preload/api.d.ts` is included so `window.gomentor` is typed inside
+  // `page.evaluate` callbacks. That is the point of the e2e specs — an untyped
+  // `window.gomentor` would let a spec assert against a channel or field that
+  // does not exist and still compile.
+  //
+  // Playwright's own config is checked here too, rather than being left as the
+  // one unchecked TypeScript file in the repo.
+  "include": ["test/e2e/**/*.ts", "playwright.config.ts", "src/preload/api.d.ts"]
+}

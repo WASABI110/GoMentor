@@ -73,6 +73,8 @@ Node v24.18.0, npm 11.16.0, Python 3.12.10, Windows 11 Pro. Windows-first, cross
 ### R1 — Workspace and toolchain
 pnpm workspace with `apps/desktop`, `apps/web` (placeholder), `packages/shared`, `packages/core`. Strict TypeScript, flat ESLint, Prettier, vitest workspace. `pnpm dev` launches the app; `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm package` all work.
 
+**The workspace packages must be excluded from `externalizeDepsPlugin()`** in `apps/desktop/electron.vite.config.ts` — `exclude: ['@gomentor/shared', '@gomentor/core', 'zod']` on both the `main` and `preload` targets. Recorded during Stage 5, after the app as built was found not to start at all. The plugin reads `dependencies` and leaves each entry as a runtime `require()`, which is right for real npm packages and wrong for these three: `@gomentor/shared` and `@gomentor/core` are `"type": "module"` with `main` pointing at uncompiled `.ts` source, so the CJS bundle emitted `require("@gomentor/shared")`, Node resolved it to the TypeScript source, and the app died at load. `zod` is excluded one layer down because the shared schemas import it — bundling shared while externalizing zod only moves the unresolved `require` inside the bundle. The preload needs the exclusion more urgently still: a sandboxed preload has **no node_modules resolution whatsoever** (measured), so any runtime `require` of a non-Electron module throws `module not found`, the preload dies before `exposeInMainWorld`, and the page silently gets `window.gomentor === undefined`. That is why `src/preload/index.ts` takes only `import type` imports; this exclusion is the second layer of the same guarantee. Verify with `grep -o 'require("[^"]*")' out/preload/index.js` — the only line should be `require("electron")`.
+
 ### R2 — Trellis coexistence (hard boundary)
 App code, build scripts, and CI **never** read from or write to `.trellis/`, `.claude/`, `.codex/`, `.qoder/`, `.agents/`, or `AGENTS.md`. Enforced by:
 - `tsconfig.base.json` `exclude` and `eslint.config.js` `ignores` both listing these paths
@@ -86,6 +88,8 @@ App code, build scripts, and CI **never** read from or write to `.trellis/`, `.c
 - **Renderer**: React 19 + TS. Presentation only, never touches Node APIs
 
 Renderer→main is always `invoke`. Main→renderer uses typed event channels for streaming (LLM token deltas; later KataGo ticks, coalesced to ~20/s in main).
+
+**The `IpcResult` envelope stays a union all the way into the renderer — the preload must not unwrap it into a `throw`.** Amended during Stage 5, because the opposite was already asserted in `main/ipc/register.ts` before anyone tested it. `contextBridge` does not carry an Error's own properties: an `AppError` thrown inside a bridged function is caught in the page as a plain `Error` with `name: 'Error'`, an empty `Object.keys()`, and both `code` and `context` `undefined`. Only `message` survives — which is precisely the failure the typed envelope exists to prevent (`error-handling.md:65`: the renderer localises `code`, never displays raw `message`), reintroduced one layer later. Returning the envelope as *data* preserves `code`, `message`, and nested `context`, measured end-to-end in a real sandboxed window. Note also what the frozen-object requirement above does *not* buy: `Object.freeze` in the preload is not what stops the page mutating the bridge — `contextBridge` builds its own frozen mirror in the page realm, so removing the freeze changes nothing observable from the renderer. Keep it, but do not treat it as the guarantee.
 
 ### R4 — IPC contract
 `packages/shared/src/ipc.ts` is the single contract: namespaced `domain:verb` channel names with zod request/response schemas. `ipc/register.ts` wraps every handler with request validation (and response validation in dev builds). A lint rule forbids reaching past the typed wrappers to Electron's IPC primitives (`ipcMain.handle`, `webContents.send`) anywhere but `register.ts` and `events.ts`.
@@ -132,9 +136,10 @@ Each of the seven implementation stages ends with the same three-step gate: `tre
 
 `gomentor-verify` is defined in `.claude/agents/gomentor-verify.md` with tools `Read, Bash, Glob, Grep` and **no `Write`/`Edit`**. It runs the test suite plus the stage's acceptance IDs and reports per-ID `PASS | FAIL | NOT-APPLICABLE-YET` with command output or file:line as evidence.
 
-Two rules are mandatory, because they are how this kind of gate degrades into theatre:
+Three rules are mandatory, because they are how this kind of gate degrades into theatre:
 - A criterion it could not test is **`NOT-APPLICABLE-YET`, never `PASS`** — silence must not read as success.
 - **"Tests pass" is not evidence a criterion is met.** A5 requires the ≥20-file corpus to exist and be real; a green run over 3 synthetic fixtures is a FAIL on A5.
+- **Every gate from Stage 5 on must build and launch `out/`, and a gate that does not is a FAIL on its own terms.** Added during Stage 5 under this section's own amendment rule. Stages 1–4 all passed a gate consisting of typecheck + lint + vitest, and *none of those three loads the built bundle* — so the shipped artifact had never been started once. When Stage 5 launched it for the first time it died immediately at `packages/shared/src/index.ts:5` with `SyntaxError: Unexpected token 'export'`: `externalizeDepsPlugin()` had left the workspace packages as runtime `require()`s out of a CJS bundle (see R1). Four consecutive green gates over an app that could not boot is the exact failure mode D10 exists to catch, and it slipped through because the gate's evidence was all pre-runtime. A11/A1-style manual smoke would have caught it, but a gate must not depend on the one step most likely to be skipped.
 
 A FAIL blocks the stage. If a criterion itself proves wrong, amend this PRD explicitly — never lower the bar inside the verifier. Per-stage ID scoping and required evidence: `implement.md`. Rationale: `design.md` §Delivery verification.
 

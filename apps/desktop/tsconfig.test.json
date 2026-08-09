@@ -28,7 +28,8 @@
       "@main/*": ["./src/main/*"]
     }
   },
-  // e2e is Playwright's, and it is checked by neither this nor vitest.
+  // e2e is Playwright's, and it needs `DOM` in `lib` for the `page.evaluate`
+  // callbacks — see `tsconfig.e2e.json`, which checks those files.
   "include": ["test/**/*.ts"],
   "exclude": ["test/e2e/**"]
 }

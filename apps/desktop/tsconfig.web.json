@@ -1,11 +1,21 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vite/client"],
-    "outDir": "./out-types/web",
+    // Not `composite`, and no `outDir` — the same reasoning as
+    // `tsconfig.node.json`, reached here one stage later. Composite requires
+    // every input to sit under `rootDir`, and Stage 5's `src/preload/api.d.ts`
+    // imports `GoMentorApi` from the preload entry, which imports types from
+    // `@gomentor/shared` via `paths`. That pulls a sibling package's source into
+    // this project and every cross-package import becomes TS6059/TS6307.
+    //
+    // Dropping composite rather than adding a project reference to
+    // `packages/shared`: that package is itself `noEmit` for the same reason, so
+    // it has no declaration output to reference. Nothing is lost — no build runs
+    // `tsc -b`, and the shipped bundles come from electron-vite.
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@gomentor/shared": ["../../packages/shared/src/index.ts"],

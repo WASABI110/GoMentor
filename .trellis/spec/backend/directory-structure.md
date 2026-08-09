@@ -103,9 +103,9 @@ The same split applies to LLM: `core/llm/` is the provider abstraction and wire 
 
 **No `electron` import in `packages/core`.** Lint-enforced. Core must run under plain Node in tests.
 
-**No raw IPC channel strings outside `packages/shared/src/ipc.ts`.** Lint-enforced.
+**No raw IPC channel strings outside `packages/shared/src/ipc.ts`** — *withdrawn*, and it is worth knowing why rather than just that it is gone. This was listed as lint-enforced; Stage 4 measured the premise and it is false. `handle()` and `emit()` are generic over `C extends ChannelName` / `E extends EventName`, so a mistyped channel is a TS2345 listing every valid channel. The rule fired on all 17 already-type-checked call sites and advised importing a per-channel constant that does not and should not exist — `CHANNELS` is the contract. Inline channel literals at wrapper call sites are correct style. The rule that remains is the one below, which types genuinely cannot express.
 
-**No `ipcMain.handle` called directly.** Always go through `ipc/register.ts`'s `handle()` wrapper, so every channel gets schema validation and consistent error mapping.
+**No `ipcMain.handle` called directly, and no `webContents.send` called directly.** Always go through `ipc/register.ts`'s `handle()` and `ipc/events.ts`'s `emit()`, so every channel gets schema validation and consistent error mapping. This one is lint-enforced (`no-restricted-syntax`, exempting the two wrapper files) precisely because a bare `ipcMain.handle` is perfectly well-typed while silently skipping request validation and error-envelope mapping — a throw would then cross the boundary as a stringified `Error` and lose the `code` the renderer translates (`error-handling.md`).
 
 **No secrets crossing to the renderer.** Only the plaintext `hasSecret` boolean does. The key itself never leaves main.
 

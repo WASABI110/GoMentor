@@ -34,8 +34,18 @@ import { scoped } from '../logger'
  * `ipcRenderer.invoke` rejects with an `Error` whose message is a stringified
  * remote error. The `code` cannot survive that, and the renderer's whole error
  * story is `code` → i18n lookup. Returning `{ ok: false, error }` keeps the
- * envelope structured. The preload layer is where this is unwrapped back into a
- * throw, so renderer call sites still read like normal async code.
+ * envelope structured.
+ *
+ * The union then stays a union all the way to the renderer. This comment
+ * previously said the preload unwrapped it back into a throw "so renderer call
+ * sites still read like normal async code" — that was written before it was
+ * tested, and Stage 5 measured it false. `contextBridge` does not carry an
+ * Error's own properties: an `AppError` thrown inside a bridged function is
+ * caught in the page as a plain `Error` with `name: 'Error'`, `Object.keys()`
+ * empty, and `code` and `context` both `undefined`. Only `message` survives —
+ * which is precisely the failure this union exists to avoid, reintroduced one
+ * layer later. Returning the envelope as *data* preserves `code`, `message`, and
+ * nested `context`, measured end-to-end in a real sandboxed window.
  */
 
 const logger = scoped('main:ipc')

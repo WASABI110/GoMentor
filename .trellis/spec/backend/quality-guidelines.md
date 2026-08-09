@@ -21,9 +21,9 @@ Strict TypeScript, no `any`, zod at every boundary. Two things carry disproporti
 
 **`electron` imported in `packages/core`.** Lint-enforced. Core must run under plain Node.
 
-**Raw IPC channel strings outside `packages/shared/src/ipc.ts`.** Lint-enforced. Strings drift silently on rename.
+**`ipcMain.handle` or `webContents.send` called directly.** Always via `ipc/register.ts`'s `handle()` or `ipc/events.ts`'s `emit()`, or the channel loses schema validation and error-envelope mapping. Lint-enforced, exempting those two wrapper files.
 
-**`ipcMain.handle` called directly.** Always via `ipc/register.ts`'s `handle()` wrapper, or the channel loses schema validation.
+> A former entry here — *"Raw IPC channel strings outside `ipc.ts`. Lint-enforced. Strings drift silently on rename."* — has been **withdrawn**. Stage 4 measured the premise and it is false: the wrappers are generic over `ChannelName`/`EventName`, so a mistyped channel is a TS2345 naming every valid channel. Inline channel literals at wrapper call sites are correct style; see `directory-structure.md` and the comment in `eslint.config.js`.
 
 **Path construction outside `paths.ts`.** Scattered `path.join(app.getPath(...))` is how cross-platform path bugs enter.
 
@@ -80,13 +80,14 @@ These are the "wrong but looks right" cases. A green test run is not sufficient 
 - **The corpus must be real and ≥20 files.** Three synthetic fixtures passing is a failure, not a pass.
 - **Coordinate tests must actually cross `I`.** A test that never exercises the GTP `I`-skip has not tested it.
 - **Parsers must be asserted to terminate**, under a timeout — not merely to return the right error. But be clear about what a `{ timeout }` annotation buys: **vitest cannot interrupt synchronous code.** Measured — a test with `{ timeout: 500 }` that spins for 3s runs the full 3s and *then* fails at 3006ms. So the annotation is a post-hoc report on a loop that already finished, and against a genuine infinite sync loop it does not fail the run, it hangs the runner. Termination has to be structural: every parser loop carries a guard bounded by **input length**, so the bound is reachable and the failure is a typed error. A guard set to `Number.MAX_SAFE_INTEGER` is not a bound — 2^53 iterations outlives the process, so it presents as the hang it was meant to prevent. `sgf/parser.ts` had exactly that and was corrected. To actually verify termination, kill from outside the runner (`timeout 150 npx tsx …`).
-- **Preload isolation must be asserted at runtime in the renderer** (`window.ipcRenderer` and `window.require` are `undefined`), not by reading preload source.
+- **Preload isolation must be asserted at runtime in the renderer** (`window.ipcRenderer` and `window.require` are `undefined`), not by reading preload source. Implemented in Stage 5 as `apps/desktop/test/e2e/preload-boundary.spec.ts`, which launches the built app under Playwright's Electron driver rather than constructing a `BrowserWindow` in-test — a hand-built window proves only that the test set the flags, so it asserts the real `webPreferences` via `webContents.getLastWebPreferences()` (undocumented internal API; returns `null` until a navigation has committed, so await the page first). Two findings from that suite are worth carrying forward. **`Object.freeze` in the preload is not what makes the bridge immutable**: a mutation removing it left all six tests green, and measuring with a deliberately unfrozen export showed why — `contextBridge` builds its own frozen mirror in the page realm, so the page sees `Object.isFrozen === true` regardless. That survivor was a comment over-attributing a guarantee, not a coverage gap; keep the freeze, but do not claim it. **`contextBridge` also strips an Error's own properties** — a thrown `AppError` arrives in the page as a plain `Error` with `code` and `context` `undefined` and only `message` intact — so the `IpcResult` envelope must stay a union all the way in and must not be unwrapped into a throw at the preload. `register.ts` asserted the opposite before it was tested.
 - **Redaction must be tested with a key-shaped value**, not assumed from the code.
 - **A meta-test must be shown to fail** when a channel is added without coverage. A vacuously-passing meta-test is worse than none.
 - **A measuring instrument must be shown to fail too.** The rule above applies to anything that reports on the tests, not just to tests. A mutation harness whose test filter matches nothing gets a green run for every mutation and reports `0 escaped` — the most reassuring possible output from an instrument measuring nothing. Every harness in `scripts/` therefore gates on its own baseline (`total <= 0 || failed > 0` ⇒ refuse to report) and treats an anchor matching ≠1 site as a failure rather than a skip. Both guards have fired on real mistakes; keep them in any new harness.
 - **Path filters passed to vitest resolve against the project root, not the repo root.** `npx vitest run --project core packages/core/test/foo.test.ts` matches zero files and exits 0; the filter must be `test/foo.test.ts`. This is the specific mistake the baseline gate above caught, and it is silent without it — note that it contradicts the natural reading of "always run from the repository root" below, which governs the *cwd*, not the filter.
 - **An unkillable mutation must be removed from the harness, not recorded as escaped.** Code that is provably dead cannot be covered by any test, so listing a mutation on it inflates the denominator with a check the suite cannot make. Mutate the premise that makes it dead instead (`mutate-coord-error.mts`'s `Z1` shrinks the zobrist key table), and say in the source comment that the dead branch is enforced by review rather than by tests.
 - **Packaged builds must be unpacked** to confirm dependencies are present. An `.npmrc` hoist misconfig silently omits deps and `pnpm dev` does not catch it.
+- **The built bundle must be launched, not just built.** `electron-vite build` succeeding says nothing about whether `out/main/index.js` can be loaded, and typecheck, lint, and vitest all run against source — none of them loads the bundle. Measured in Stage 5: the app had a green gate four stages running while `out/` died instantly at `packages/shared/src/index.ts:5` with `SyntaxError: Unexpected token 'export'`, because `externalizeDepsPlugin()` had left the workspace packages as runtime `require()`s out of a CJS bundle and Node resolved them to uncompiled `.ts`. Note this is *not* the same hole as the `.npmrc` one above and is not caught by the same check: here the dependency is present, it is the module format that is wrong, and `pnpm dev` does not catch it either — dev serves the renderer through Vite and does not exercise the production main bundle. The `e2e` script therefore builds before it tests (`electron-vite build && playwright test`) rather than trusting whatever is in `out/`; a stale bundle turns every assertion below into a statement about the previous commit. Cheap standing check on the preload, whose sandbox has no module resolution at all: `grep -o 'require("[^"]*")' out/preload/index.js` must print only `require("electron")`.
 
 ---
 
@@ -99,10 +100,23 @@ pnpm test                          # all projects
 npx vitest run --project core      # one project
 npx vitest run --project shared
 npx vitest run --project desktop
+pnpm e2e                           # Playwright; builds `out/` first, then drives the real app
 pnpm lint
 pnpm typecheck
 pnpm format:check
 ```
+
+`pnpm e2e` is separate from `pnpm test` deliberately: it needs a build and a real
+Electron process, so it is seconds rather than milliseconds and cannot run in a
+vitest worker. It is not optional at a stage gate — see "the built bundle must be
+launched" above.
+
+One cwd trap specific to the build: `electron.vite.config.ts` resolves its entry
+points with `resolve('src/main/index.ts')`, which is **cwd-relative**. Running
+`electron-vite build` from the repo root fails with "An entry point is required
+in the electron vite main config"; go through the package script
+(`pnpm --filter @gomentor/desktop build`, or root `pnpm build`) so pnpm sets the
+cwd. This is the same class of bug as the vitest path filter above.
 
 `cd <pkg> && npx vitest ...` works but is worse for two reasons: it does not
 match the permission allowlist in `.claude/settings.json` (so an agent hits the
@@ -122,6 +136,7 @@ through the workspace, so a contract change that breaks a consumer shows up.
 - [ ] No secrets, SGF, chat text, or prompts reachable by a log call
 - [ ] Paths come from `paths.ts`
 - [ ] `packages/core` additions are pure and Electron-free
+- [ ] The built bundle was launched, not just built — `pnpm e2e` green
 - [ ] Cancellable work threads an `AbortSignal`
 - [ ] Trellis-managed paths untouched
 - [ ] Tests satisfy the substance above, not just the shape

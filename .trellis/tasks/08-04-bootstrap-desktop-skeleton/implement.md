@@ -112,8 +112,8 @@ No Electron dependency in this stage. Fully testable headless.
 
 ## Stage 5 — Preload (R3)
 
-- [ ] `src/preload/index.ts` — one **frozen** object via `contextBridge`; `invoke` methods + `on*` registrars returning unsubscribe fns; **no `ipcRenderer` leak**
-- [ ] `src/preload/api.d.ts` — global `Window` augmentation
+- [x] `src/preload/index.ts` — one **frozen** object via `contextBridge`; `invoke` methods + `on*` registrars returning unsubscribe fns; **no `ipcRenderer` leak**
+- [x] `src/preload/api.d.ts` — global `Window` augmentation
 
 **Gate**: renderer has full type safety on `window.gomentor`; no Node API reachable from the page.
 
