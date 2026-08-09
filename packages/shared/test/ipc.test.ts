@@ -194,6 +194,17 @@ const EVENT_CASES: Record<
     valid: { reason: 'import' },
     invalid: [{}, { reason: 'telepathy' }],
   },
+  'menu:command': {
+    valid: { command: 'openSgf' },
+    invalid: [
+      {},
+      // A closed enum, not a free string. The renderer switches on this to pick
+      // a flow, so an unknown command would silently do nothing — and an open
+      // string would let a future main-side typo ship undetected.
+      { command: 'openSGF' },
+      { command: 'rm -rf' },
+    ],
+  },
   'engine:status': {
     valid: { status: 'unavailable' },
     invalid: [{}, { status: 'confused' }, { status: 'ready', downloadProgress: 2 }],
@@ -295,5 +306,85 @@ describe('coverage meta-test', () => {
     for (const name of CHANNEL_NAMES) {
       expect(name, `${name} must be domain:verb`).toMatch(/^[a-z]+:[a-zA-Z]+$/)
     }
+  })
+})
+
+describe('a settings patch is not inflated by validation', () => {
+  /**
+   * `register.ts` hands the handler zod's **output**, not the raw request. So a
+   * request schema that fills in defaults does not merely permit a value — it
+   * fabricates one, and the handler cannot tell a default apart from a field the
+   * user deliberately set.
+   *
+   * That is what `settingsSchema.partial()` did here. `.partial()` makes keys
+   * optional on input but leaves each field's `.default()` in place, so a patch
+   * naming `llm.model` arrived carrying an explicit value for every other
+   * setting — resetting theme to dark, locale to zh-CN, and each preference the
+   * user had chosen. Silently, with no error.
+   *
+   * These tests assert on the *output* rather than on `success`, because
+   * acceptance was never the problem.
+   */
+  const parse = (patch: unknown): unknown => {
+    const result = CHANNELS['settings:set'].request.safeParse({ patch })
+    // `?? '(root)'`: with `noUncheckedIndexedAccess`, `issues[0]` is possibly
+    // undefined, and a bare template would stringify that as "undefined" — a
+    // rejection message that names no field at all.
+    if (!result.success) {
+      throw new Error(`rejected: ${result.error.issues[0]?.path.join('.') ?? '(root)'}`)
+    }
+    return (result.data as { patch: unknown }).patch
+  }
+
+  it('returns exactly the fields the caller named', () => {
+    expect(parse({ llm: { model: 'gpt-5' } })).toEqual({ llm: { model: 'gpt-5' } })
+  })
+
+  it('does not invent sibling fields inside a named section', () => {
+    // The specific regression: `temperature` and `baseUrl` must not appear.
+    // Keys, not just values — an added key with the default value is what
+    // overwrote the user's setting downstream.
+    expect(Object.keys(parse({ llm: { model: 'gpt-5' } }) as object)).toEqual(['llm'])
+    expect(
+      Object.keys((parse({ llm: { model: 'gpt-5' } }) as { llm: object }).llm),
+    ).toEqual(['model'])
+  })
+
+  it('does not invent whole sections the caller never mentioned', () => {
+    expect(Object.keys(parse({ debugLogging: true }) as object)).toEqual([
+      'debugLogging',
+    ])
+  })
+
+  it('leaves an empty patch empty', () => {
+    // A no-op patch that came back as the full default document would rewrite
+    // every setting on the next save.
+    expect(parse({})).toEqual({})
+  })
+
+  it('still rejects an out-of-range value', () => {
+    // Dropping defaults must not have dropped validation with them.
+    expect(() => parse({ llm: { temperature: 99 } })).toThrow()
+    expect(() => parse({ engine: { maxVisits: 0 } })).toThrow()
+    expect(() => parse({ ui: { theme: 'neon' } })).toThrow()
+  })
+
+  it('preserves an unknown key for forward compatibility', () => {
+    // A newer renderer patching a key this build does not know must not have it
+    // rejected — the same rollback scenario `settingsSchema` is `.loose()` for.
+    expect(parse({ futureSetting: 'x' })).toEqual({ futureSetting: 'x' })
+  })
+
+  it('accepts an explicit null where the schema allows one', () => {
+    // `null` is meaningful — `engine.backend: null` means auto-detect. Stripping
+    // nullability while stripping defaults would make that unexpressible.
+    expect(parse({ engine: { backend: null } })).toEqual({ engine: { backend: null } })
+  })
+
+  it('does not accept hasKey from the renderer', () => {
+    // `hasKey` is a read-only mirror of secret presence, recomputed by
+    // `settings:get`. If a patch could set it, the renderer could claim a key
+    // exists and the UI would offer to use one that is not there.
+    expect(parse({ llm: { hasKey: true } })).toEqual({ llm: {} })
   })
 })

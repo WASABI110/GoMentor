@@ -1,13 +1,13 @@
 import { execFileSync } from 'node:child_process'
 import {
   mkdtempSync,
+  mkdirSync,
   cpSync,
   rmSync,
   readFileSync,
   writeFileSync,
   symlinkSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CHANNELS, CHANNEL_NAMES, EVENTS, EVENT_NAMES } from '../src/ipc'
@@ -30,6 +30,27 @@ import { CHANNELS, CHANNEL_NAMES, EVENTS, EVENT_NAMES } from '../src/ipc'
 const PKG_ROOT = resolve(import.meta.dirname, '..')
 const REPO_ROOT = resolve(PKG_ROOT, '..', '..')
 
+/**
+ * Scratch directories live **inside the repository**, not in `tmpdir()`.
+ *
+ * On Windows `tmpdir()` is on `C:` while a repo may be on another drive, and the
+ * copy reaches its dependencies through a junction to the repo's `node_modules`.
+ * Across drives, the forked vitest resolves a *different instance* of itself
+ * than the one the copied test files import, so `describe`/`it` register on a
+ * registry the runner is not reading — and every file reports "No test suite
+ * found in file …".
+ *
+ * That failure mode is nasty in a specific way: it is not an error about paths
+ * or modules, it looks exactly like the test files being empty. Both assertions
+ * below would report the baseline as broken and give no hint why.
+ *
+ * Verified by measurement, not reasoning: an identical copy passes when run
+ * directly in the same directory and fails when forked, and moving the scratch
+ * dir onto the repo's drive makes the forked run pass. Keeping it beside the
+ * repo also means it shares the drive by construction rather than by luck.
+ */
+const SCRATCH_BASE = join(REPO_ROOT, 'node_modules', '.cache', 'gomentor-meta')
+
 interface RunResult {
   exitCode: number
   output: string
@@ -40,7 +61,8 @@ interface RunResult {
  * source appended to `src/ipc.ts`.
  */
 function runSuiteWithInjection(injectedSource: string | null): RunResult {
-  const scratch = mkdtempSync(join(tmpdir(), 'gomentor-meta-'))
+  mkdirSync(SCRATCH_BASE, { recursive: true })
+  const scratch = mkdtempSync(join(SCRATCH_BASE, 'run-'))
   try {
     cpSync(join(PKG_ROOT, 'src'), join(scratch, 'src'), { recursive: true })
     cpSync(join(PKG_ROOT, 'test'), join(scratch, 'test'), { recursive: true })

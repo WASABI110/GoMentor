@@ -97,6 +97,89 @@ export const settingsSchema = z
 
 export type Settings = z.infer<typeof settingsSchema>
 
+/**
+ * A patch: every field optional, and — critically — **no defaults applied**.
+ *
+ * ## Why this is not `settingsSchema.partial()`
+ *
+ * `.partial()` makes keys optional on *input*, but it does not remove the
+ * `.default()` on each field, and in zod 4 a defaulted field always produces a
+ * value. So `settingsSchema.partial().parse({ llm: { model: 'x' } })` returns the
+ * whole document filled with defaults — and since `register.ts` hands the
+ * handler zod's *output*, a patch naming one field arrived at `settings.update`
+ * carrying an explicit value for every other field.
+ *
+ * The user-visible consequence: changing the model reset theme to dark, locale
+ * to zh-CN, and every other preference the user had set. Silently, with no
+ * error. Found by an integration test asserting a sibling field survived — the
+ * unit test missed it because calling `settings.update` directly skips request
+ * validation, which is where the inflation happened.
+ *
+ * ## Why the fields are written out rather than derived
+ *
+ * A helper walking `settingsSchema` and stripping `.default()` wrappers has to
+ * read zod's internal `def`, and if a zod upgrade changed that shape the helper
+ * would degrade to passing everything through unvalidated — a patch schema that
+ * validates nothing, failing open. Explicit is longer but it cannot break
+ * quietly, and a new setting that someone forgets to add here is rejected rather
+ * than accepted unchecked.
+ *
+ * Constraints are reused from the sections above (`.min`/`.max`, the enums), so
+ * a bound tightened there tightens here too. Only the defaults are dropped.
+ */
+const llmPatchSchema = z.object({
+  kind: llmProviderKindSchema.optional(),
+  baseUrl: z.url().optional(),
+  model: z.string().optional(),
+  // `hasKey` is intentionally absent: it is a read-only mirror of secret
+  // presence, recomputed by `settings:get` from the secrets service. Accepting it
+  // here would let the renderer claim a key exists.
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().min(1).optional(),
+  toolsSupported: z.boolean().nullable().optional(),
+})
+
+const enginePatchSchema = z.object({
+  backend: engineBackendSchema.nullable().optional(),
+  binaryPath: z.string().optional(),
+  networkPath: z.string().optional(),
+  maxVisits: z.number().int().min(1).optional(),
+  threads: z.number().int().min(1).optional(),
+  analyzeOwnership: z.boolean().optional(),
+})
+
+const libraryPatchSchema = z.object({
+  roots: z.array(z.string()).optional(),
+  watchEnabled: z.boolean().optional(),
+})
+
+const uiPatchSchema = z.object({
+  locale: localeSchema.optional(),
+  theme: z.enum(['dark', 'light', 'system']).optional(),
+  showCoordinates: z.boolean().optional(),
+  animationsEnabled: z.boolean().optional(),
+  panelWidths: z
+    .object({ library: z.number().optional(), teacher: z.number().optional() })
+    .optional(),
+})
+
+export const settingsPatchSchema = z
+  .object({
+    // `version` is absent on purpose: it is bumped by a migration in main, not
+    // by the renderer.
+    llm: llmPatchSchema.optional(),
+    engine: enginePatchSchema.optional(),
+    library: libraryPatchSchema.optional(),
+    ui: uiPatchSchema.optional(),
+    telemetryConsent: z.boolean().optional(),
+    debugLogging: z.boolean().optional(),
+  })
+  // Same forward-compat reason as `settingsSchema`: a newer renderer patching a
+  // key this build does not know must not have it rejected.
+  .loose()
+
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>
+
 /** Secrets are addressed by name; values never cross IPC. */
 export const secretKeySchema = z.enum(['llmApiKey', 'foxSessionToken'])
 export type SecretKey = z.infer<typeof secretKeySchema>

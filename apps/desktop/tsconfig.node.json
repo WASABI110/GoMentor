@@ -1,15 +1,26 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
     "lib": ["ES2023"],
     "types": ["node"],
-    "outDir": "./out-types/node",
     // The main process bundles to CJS (Electron's mature path), so __dirname
     // is available and import.meta is not. The renderer stays ESM.
     "module": "CommonJS",
     "moduleResolution": "Node",
     "verbatimModuleSyntax": false,
+    // Not `composite`, and no `outDir`. Composite requires every input to sit
+    // under `rootDir`, but main imports `@gomentor/shared` and `@gomentor/core`
+    // through `paths` that resolve to sibling packages' source — so the moment
+    // Stage 4 wired core into main, every cross-package import became
+    // TS6059/TS6307. Stage 1 only ever imported `electron`, which is why it did
+    // not surface until now.
+    //
+    // Nothing is lost: no build runs `tsc -b`, the reference from the root
+    // `tsconfig.json` is only there to make `tsc -p tsconfig.json` check both
+    // halves, and the shipped bundle comes from electron-vite. The sibling
+    // packages take the same `noEmit` approach for the same reason — see
+    // `packages/shared/tsconfig.json`.
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@gomentor/shared": ["../../packages/shared/src/index.ts"],
@@ -19,10 +30,7 @@
       "@main/*": ["./src/main/*"]
     }
   },
-  "include": [
-    "src/main/**/*.ts",
-    "src/preload/**/*.ts",
-    "test/**/*.ts",
-    "electron.vite.config.ts"
-  ]
+  // `test/**` is deliberately absent — see `tsconfig.test.json`. The tests are
+  // ESM under vitest and cannot be checked against this project's CJS `module`.
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "electron.vite.config.ts"]
 }

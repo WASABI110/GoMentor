@@ -49,6 +49,21 @@ export default defineConfig(
       ],
       'no-console': ['error', { allow: ['warn', 'error'] }],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
+      // Destructuring-to-omit is how a field is dropped from an object without
+      // mutating it — `const { [SECRETS_FIELD]: _secrets, ...rest } = document`
+      // is the whole mechanism that keeps ciphertext out of the renderer's view.
+      // The binding is deliberately unused, so the `_` prefix marks it as such.
+      // `ignoreRestSiblings` (on by default) does not cover a *computed* key,
+      // which is exactly the shape used above.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 
@@ -145,17 +160,47 @@ export default defineConfig(
   },
 
   {
-    // Raw channel strings drift silently on rename. ipc.ts is the one contract.
+    // Every IPC call must go through the typed wrappers in `main/ipc/`.
+    //
+    // This rule used to ban channel *string literals* anywhere in main, on the
+    // stated grounds that "raw channel strings drift silently on rename". That
+    // premise was measured and is false: `handle()` and `emit()` take
+    // `C extends ChannelName` / `E extends EventName`, so a renamed or
+    // mistyped channel is a TS2345 naming every valid channel — the loudest
+    // possible failure. The rule fired on all 17 already-type-checked call
+    // sites, and the remedy it advised ("import the channel from
+    // @gomentor/shared/ipc") named an export that does not exist: shared
+    // exports `CHANNELS` and `CHANNEL_NAMES`, never per-channel constants.
+    //
+    // What types *cannot* express is the invariant below: that nobody reaches
+    // past the wrappers to Electron's primitives. A bare `ipcMain.handle` is
+    // perfectly well-typed and silently skips request validation, response
+    // validation, and error-envelope mapping — so a throw would cross the
+    // boundary as a stringified Error and lose the `code` the renderer needs
+    // (`error-handling.md`). That is the drift worth a linter.
+    //
+    // `register.ts` and `events.ts` are the two wrappers and are exempt.
     files: ['apps/desktop/src/**/*.{ts,tsx}'],
-    ignores: ['**/*.test.ts', '**/*.spec.ts'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      'apps/desktop/src/main/ipc/register.ts',
+      'apps/desktop/src/main/ipc/events.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',
         {
           selector:
-            'Literal[value=/^(sgf|library|llm|settings|katago|profile|kb|update):[a-zA-Z]+$/]',
+            "MemberExpression[object.name='ipcMain'][property.name=/^(handle|handleOnce|on|once)$/]",
           message:
-            'Do not inline IPC channel strings. Import the channel from @gomentor/shared/ipc.',
+            'Register handlers with `handle()` from main/ipc/register, not ipcMain directly — it is what validates the request and maps throws to a typed envelope.',
+        },
+        {
+          selector:
+            "MemberExpression[property.name='send'][object.property.name='webContents']",
+          message:
+            'Push to the renderer with `emit()` from main/ipc/events, not webContents.send directly — it is what validates the payload and skips destroyed windows.',
         },
       ],
     },

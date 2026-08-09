@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { gameSchema, gameSummarySchema } from './types/game'
 import { engineInfoSchema } from './types/analysis'
 import { chatChunkSchema, chatContextSchema, chatMessageSchema } from './types/chat'
-import { secretKeySchema, settingsSchema } from './types/settings'
+import { secretKeySchema, settingsPatchSchema, settingsSchema } from './types/settings'
 import { errorEnvelopeSchema } from './types/errors'
 
 /**
@@ -79,8 +79,13 @@ export const CHANNELS = {
     response: settingsSchema,
   },
   'settings:set': {
-    // Deep-partial so the renderer can patch one field without a read-modify-write race.
-    request: z.object({ patch: settingsSchema.partial() }),
+    // `settingsPatchSchema`, not `settingsSchema.partial()`. The latter makes
+    // keys optional but leaves each field's `.default()` in place, so zod's
+    // output — which is what `register.ts` hands the handler — came back as the
+    // whole document filled with defaults. A patch naming one field then reset
+    // every other setting the user had chosen. See the note on
+    // `settingsPatchSchema`.
+    request: z.object({ patch: settingsPatchSchema }),
     response: settingsSchema,
   },
   'settings:setSecret': {
@@ -117,6 +122,16 @@ export const EVENTS = {
 
   /** The library changed on disk or via import; the renderer refetches. */
   'library:changed': z.object({ reason: z.enum(['import', 'delete', 'watch']) }),
+
+  /**
+   * The native menu asked the renderer to run a flow it owns.
+   *
+   * The menu lives in main but the open-SGF flow lives in the renderer, and
+   * having main open the dialog directly would make the accelerator and the
+   * in-app button two independent paths to the same feature — which is how they
+   * drift. So main asks, and the renderer runs the one implementation.
+   */
+  'menu:command': z.object({ command: z.enum(['openSgf']) }),
 
   /**
    * Engine lifecycle transitions. M1 only ever emits 'unavailable'.

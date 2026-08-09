@@ -1,58 +1,122 @@
 import { app, BrowserWindow } from 'electron'
-import { join } from 'node:path'
+import { CHANNEL_NAMES } from '@gomentor/shared'
+import { initLogging, scoped } from './logger'
+import { createSettingsService } from './settings'
+import { createSecretsService, electronEncryptor } from './safe-storage'
+import { createGameStore } from './library/store'
+import { createLlmService } from './llm/service'
+import { createTelemetry } from './telemetry'
+import { registerAllHandlers, removeAllHandlers } from './ipc'
+import { createWindow } from './window'
+import { applyMenu } from './menu'
+import { emit } from './ipc/events'
 
-// Stage 1 skeleton: single-instance lock, lifecycle, window creation.
-// Stage 4 adds paths, logger, settings, safe-storage, and IPC registration.
+/**
+ * Main process entry: single-instance lock, lifecycle, IPC registration, window.
+ *
+ * ## Ordering here is load-bearing
+ *
+ * 1. **Logging first**, before the single-instance check — so a rejected second
+ *    instance is recorded. That line is the answer to "I clicked the icon and
+ *    nothing happened", which is otherwise unanswerable.
+ * 2. **Single-instance lock before anything stateful.** Two instances would fight
+ *    over the settings file, the log file, and — from M2 — SQLite and the GPU
+ *    (`design.md` §Operational). The loser must quit before it has opened any of
+ *    them, so this cannot be deferred into `whenReady`.
+ * 3. **Handlers registered before the window loads.** The renderer calls
+ *    `settings:get` on mount; a window created first would race it and get
+ *    "no handler registered for channel".
+ */
+
+const logger = scoped('main:app')
+
+/**
+ * Settings are needed before `app.whenReady()` resolves in order to configure
+ * logging, but `app.getPath('userData')` throws before ready. So the service is
+ * constructed lazily inside `whenReady` and this holds it for the lifecycle
+ * handlers below.
+ */
+let services: ReturnType<typeof createServices> | undefined
+
+function createServices() {
+  const settings = createSettingsService()
+  const secrets = createSecretsService(settings.secretStore, electronEncryptor)
+  const store = createGameStore()
+  const llm = createLlmService(settings, secrets)
+  const telemetry = createTelemetry()
+  return { settings, secrets, store, llm, telemetry }
+}
 
 // Two instances would fight over settings, the log file, and — from M2 —
-// SQLite and the GPU.
+// SQLite and the GPU. The loser quits immediately.
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
+  // Logging is initialised with debug off: reading settings here would require
+  // `userData`, which is not available yet, and this process is about to exit.
+  initLogging({ debugEnabled: false })
+  logger.info('second instance rejected, quitting')
   app.quit()
+} else {
+  void app.whenReady().then(() => {
+    const created = createServices()
+    services = created
+
+    // Now that `userData` is reachable, logging can honour the user's setting.
+    initLogging({ debugEnabled: created.settings.get().debugLogging })
+
+    logger.info('app starting', {
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+    })
+
+    created.telemetry.track({
+      name: 'app_started',
+      platform: process.platform,
+      arch: process.arch,
+      version: app.getVersion(),
+    })
+
+    if (!created.secrets.isPersistent()) {
+      // Surfaced at startup rather than only at the first key write, so the
+      // settings UI can warn before a user types a key they will lose.
+      logger.warn('OS encryption unavailable; secrets will be session-only')
+    }
+
+    // Before the window: the renderer calls settings:get on mount.
+    registerAllHandlers({
+      store: created.store,
+      settings: created.settings,
+      secrets: created.secrets,
+      llm: created.llm,
+      now: () => new Date().toISOString(),
+    })
+
+    createWindow(created.settings)
+
+    applyMenu({
+      openSgf: () => {
+        // The menu asks the *renderer* to run its open flow rather than opening
+        // the dialog here. Otherwise the accelerator and the in-app button would
+        // be two paths to the same feature, and they would drift.
+        emit('menu:command', { command: 'openSgf' })
+      },
+    })
+
+    app.on('activate', () => {
+      // macOS: clicking the dock icon with no windows open should reopen one.
+      if (BrowserWindow.getAllWindows().length === 0) createWindow(created.settings)
+    })
+
+    // M1 has no engine. Emitted so the renderer's engine status UI has a real
+    // state to render rather than an indefinite "connecting".
+    emit('engine:status', { status: 'unavailable' })
+  })
 }
-
-function createWindow(): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 700,
-    show: false,
-    webPreferences: {
-      // electron-vite emits the preload as CJS `.js` here (it only switches to
-      // `.mjs` when package.json declares "type": "module"). CJS is required
-      // anyway: a sandboxed preload cannot be an ES module.
-      preload: join(__dirname, '../preload/index.js'),
-      // Security boundary. A leak here is a sandbox escape, not a bug.
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
-  })
-
-  window.on('ready-to-show', () => {
-    window.show()
-  })
-
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    void window.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  return window
-}
-
-void app.whenReady().then(() => {
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
 
 app.on('second-instance', () => {
+  logger.info('second instance attempted, focusing existing window')
   const [existing] = BrowserWindow.getAllWindows()
   if (existing) {
     if (existing.isMinimized()) existing.restore()
@@ -62,4 +126,12 @@ app.on('second-instance', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  logger.info('app quitting')
+  // In-flight streams hold AbortControllers and an open HTTP connection. Left
+  // running, the process would linger after the window closed.
+  services?.llm.shutdown()
+  removeAllHandlers(CHANNEL_NAMES)
 })
