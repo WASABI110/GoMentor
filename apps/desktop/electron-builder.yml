@@ -2,6 +2,20 @@ appId: app.gomentor.desktop
 productName: GoMentor
 copyright: Copyright (C) 2026 GoMentor contributors
 
+# Pinned because electron-builder cannot infer it in this workspace, and the
+# failure is not obvious from the error text.
+#
+# Measured: `pnpm package` died with "Cannot compute electron version from
+# installed node modules - none of the possible electron modules are installed
+# and version (^33.3.1) is not fixed in project". Electron *is* installed —
+# 33.4.11 — but `.npmrc` sets `node-linker=hoisted`, so it resolves to the
+# repository root while electron-builder looks under `apps/desktop`, its project
+# root. A caret range gives it nothing to fall back on.
+#
+# Keep in step with the `electron` devDependency in `apps/desktop/package.json`.
+# The exact version is required: a range reproduces the failure above.
+electronVersion: 33.4.11
+
 directories:
   output: dist
   buildResources: build

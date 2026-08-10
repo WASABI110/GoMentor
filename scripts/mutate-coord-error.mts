@@ -209,7 +209,10 @@ for (const m of mutations) {
  * summary line that disagreed with every row above it.
  */
 function status(row: string): string {
-  return (row.split('  ')[1] ?? '').split(' (')[0]
+  const field = row.split('  ')[1] ?? ''
+  // `split` always yields at least one element, so `[0]` is only optional to the
+  // type checker. `?? ''` states the same thing the `!` would, without the `!`.
+  return field.split(' (')[0] ?? ''
 }
 
 const controls = mutations.filter((m) => m.control === true).length

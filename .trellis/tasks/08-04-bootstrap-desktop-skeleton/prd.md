@@ -179,6 +179,46 @@ One real inaccuracy found while checking: `scripts/check-i18n.ts` names the suit
 ### R11 — CI
 Three-OS matrix (windows-latest, macos-latest arm64, ubuntu-latest) × Node 22 LTS: install (frozen lockfile) → lint → typecheck → test with coverage → package unsigned → upload artifacts. Plus lockfile-drift check, dependency-license gate (must be GPL-3.0-compatible per D4), i18n key completeness, and the R2 Trellis-immutability guard.
 
+**Status after Stage 6: `.github/workflows/ci.yml` exists but has never run.** Stated plainly because "CI exists" and "CI works" are different claims, and this document has already been wrong once by conflating a script's *name* with its *implementation*. What has been verified locally, and what has not:
+
+| Claim | Evidence |
+|---|---|
+| Every `pnpm` script the workflow calls exists | All 11 `run:` references resolved against `package.json` |
+| The YAML parses and has the intended shape | Parsed; 2 jobs, 3-OS matrix, `fail-fast: false`, Node 22, `permissions: contents: read` |
+| `check:trellis` can actually fail | Appending one line under `.trellis/` exits 1; reverting returns 0 |
+| `check:licenses` can actually fail | Removing `MIT` from the allowlist fails and names the packages; replacing the allowlist with a denylist fails 9 tests |
+| `check:i18n` can actually fail | Five copied namespaces now fail 5 tests, each naming its namespace |
+| `pnpm typecheck` covers `scripts/` and the config files | Added in Stage 6 — it did not before; see below |
+| `pnpm package` produces a launchable app | Windows `--dir` only, and with a manual cache workaround — see below |
+| The installer (NSIS/dmg/AppImage) builds | **Not verified.** The signing-tool download is unreachable from this machine |
+| The workflow runs green on any runner | **Not verified.** No push has triggered it |
+| `xvfb-run` lets Electron launch on Linux | **Not verified.** Cannot be tested from this machine |
+| macOS arm64 packaging works | **Not verified.** Same |
+
+`pnpm package` was broken until Stage 6 and nobody had run it: it failed with "Cannot compute electron version from installed node modules … version (^33.3.1) is not fixed in project". Electron *was* installed (33.4.11), but `.npmrc` sets `node-linker=hoisted`, so it resolves to the repository root while electron-builder searches under `apps/desktop`. Fixed by pinning `electronVersion` in `electron-builder.yml`. This is the same shape as Stage 5's finding — a build step that no gate had ever executed — which is the argument for having CI run it on every push rather than at whichever gate someone remembers.
+
+Past that fix, packaging reached a **network** wall rather than a configuration one, and the distinction matters because only the first kind is the project's problem. electron-builder's downloader is a Go binary (`app-builder`) that does not use the proxy this machine's `curl` uses: `curl` fetches from `github.com` in ~2s, while `app-builder` times out against `20.205.243.166:443` on every attempt. Two artifacts are affected — the 115 MB Electron zip, and `winCodeSign-2.6.0.7z`, needed to build the NSIS installer.
+
+The Electron zip was already on disk from `pnpm install`, in electron's own cache rather than electron-builder's. It was **checksum-verified before being reused** (`sha256 f64c8a5a…`, matching the `SHASUMS256.txt` line for `electron-v33.4.11-win32-x64.zip` fetched from the release) and then passed via `--config.electronDist=<cache dir>`, which `ElectronFramework.js` treats as a cache hit when the directory holds the expected zip name. That is a **local-only workaround, deliberately not committed**: the path is machine-specific, and CI's runners have working egress and need no such help.
+
+With that, `electron-builder --dir` completed and was verified as an artifact rather than as a log line:
+
+- `dist/win-unpacked/GoMentor.exe`, 188 MB, plus 17 sibling files
+- `resources/app.asar` contains `out/main`, `out/preload`, `out/renderer` **and** bundled `node_modules` — the concrete confirmation of the `.npmrc` hoist-pattern comment that a working `pnpm dev` does not catch a packaging omission
+- launched from the unpacked directory it stays alive as **4 processes** and logs `{"level":"info","scope":"main:app","msg":"app starting","electron":"33.4.11"}` — real Electron, not a stub
+
+One caution recorded because it produced a false failure first: this shell exports `ELECTRON_RUN_AS_NODE=1`, under which `GoMentor.exe --version` prints `v20.18.3` and the app exits silently with no window. That is the harness, not the build; the launch must be probed with `env -u ELECTRON_RUN_AS_NODE`. A test environment can fail a healthy artifact as convincingly as a broken artifact fails a good test.
+
+The installer step therefore remains unverified on any platform, and `pnpm package` (without `--dir`) has never completed here. CI is where that resolves.
+
+The three unverified rows are the residual risk of writing CI on a machine that cannot run it, and they resolve on the first push, not before.
+
+**`tsconfig.tools.json` was never compiled by anything.** `pnpm typecheck` was `pnpm -r typecheck`, which recurses into workspace *packages*; the root is not a package, so the config listing `scripts/**/*.ts`, `eslint.config.js`, and every `vitest.config.ts` was never handed to `tsc`. The file existed, looked like coverage, and provided none — the same "name without an implementation" shape as `check:licenses`, and worth naming separately because here the omission was one level up, in *who invokes* an otherwise-correct config.
+
+Compiling it for the first time produced two real errors, neither of which any other gate could see: an unused `PERMITTED` import left behind when the SPDX logic was split into `scripts/licenses.ts` (whose accompanying failure text still told the reader to edit `PERMITTED` "in this file", by then the wrong file), and a `string | undefined` returned as `string` in `scripts/mutate-coord-error.mts` — in the very helper written to fix an earlier miscount in that script's summary line. Fixed with `?? ''` rather than `!`, per the quality guidelines.
+
+`typecheck` is now `pnpm typecheck:tools && pnpm -r typecheck`, tools first so the cheap check fails fast. Proven able to fail: changing `isPermitted(field: string)` to `field: number` is reported across all three files that touch it (`licenses.ts`, `check-licenses.ts`, `test/licenses.test.ts`), exit 2. Reverted, exit 0. No workflow change was needed — CI already calls `pnpm typecheck`, which is exactly why the gap mattered: CI would have inherited the blind spot verbatim.
+
 ### R12 — Delivery verification at every stage gate (D10)
 Each of the seven implementation stages ends with the same three-step gate: `trellis-check` (self-fixes conventions) → **`gomentor-verify`** (read-only, judges function) → main session acts on FAILs.
 

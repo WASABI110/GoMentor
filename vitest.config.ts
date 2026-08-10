@@ -11,6 +11,9 @@ export default defineConfig({
       'packages/shared/vitest.config.ts',
       'packages/core/vitest.config.ts',
       'apps/desktop/vitest.config.ts',
+      // Repo tooling (the gate scripts). Separate from the packages because
+      // `scripts/` is build infrastructure, not a published package.
+      'scripts/vitest.config.ts',
     ],
   },
 })

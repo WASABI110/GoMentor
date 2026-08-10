@@ -1,0 +1,146 @@
+name: CI
+
+# R11: three-OS matrix × Node 22 LTS, plus the lockfile-drift, license, i18n, and
+# Trellis-immutability gates. R2 forbids CI reading or writing `.trellis/`,
+# `.claude/`, `.codex/`, `.qoder/`, `.agents/`, or `AGENTS.md` — no step below
+# references any of them except the guard that asserts they were not modified.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  # Manual runs, so a gate can be exercised without inventing a commit.
+  workflow_dispatch:
+
+# A force-push or a second push to the same PR makes the older run's answer
+# irrelevant. Cancel it rather than paying for it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: nothing here writes to the repo, opens issues, or publishes.
+permissions:
+  contents: read
+
+env:
+  # Playwright and `forbidOnly` in playwright.config.ts branch on this.
+  CI: 'true'
+
+jobs:
+  # Gates that are identical on every OS. Run once rather than three times: a
+  # license set and a JSON catalogue do not vary by platform, and a matrix would
+  # triple the cost while reporting the same answer.
+  once:
+    name: Repo gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile` IS the lockfile-drift check R11 asks for: it fails if
+      # pnpm-lock.yaml disagrees with any package.json. A separate diff step would
+      # be a second, weaker spelling of the same assertion.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Dependency licenses (D4)
+        run: pnpm check:licenses
+
+      - name: i18n completeness (R10, A12)
+        run: pnpm check:i18n
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform's failure is information about that platform, not a reason to
+      # stop learning what the others do. A Windows-only path bug should not hide
+      # a macOS-only one in the same run.
+      fail-fast: false
+      matrix:
+        # macos-latest is arm64, which R11 requires: the Electron and KataGo
+        # binaries differ by architecture, so an x64-only run would not test what
+        # ships to Apple Silicon.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit and integration tests
+        run: pnpm test
+
+      # R12: "Every gate from Stage 5 on must build and launch out/." The build is
+      # a precondition of the e2e suite, kept as its own step so a build failure
+      # reads as a build failure rather than as a test failure.
+      - name: Build
+        run: pnpm build
+
+      # Electron needs an X server on Linux and there is none on a headless
+      # runner. `xvfb-run` supplies one; the other two platforms launch directly.
+      # Without this the Linux e2e job fails at launch with an error about DISPLAY,
+      # which looks like an app defect and is not.
+      - name: End-to-end (Linux, headless display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm e2e
+
+      - name: End-to-end
+        if: runner.os != 'Linux'
+        run: pnpm e2e
+
+      # Unsigned package, per R11. Signing needs secrets that a PR from a fork
+      # must never see, and an unsigned artifact still answers the question this
+      # step exists for: does packaging succeed on this OS.
+      - name: Package (unsigned)
+        run: pnpm package
+
+      # R2's hard boundary, and it must be the last `run` step, after packaging.
+      # It asserts that nothing above — install, typecheck, test, build, e2e,
+      # package — wrote to the agent directories. Placed before `pnpm package` it
+      # would say nothing about the step most likely to write stray files, which
+      # is exactly the mistake this comment replaced.
+      #
+      # `pnpm check:trellis` is `git diff --exit-code` over the six paths. Proven
+      # to fail rather than assumed: appending one line to a file under
+      # `.trellis/` exits 1, and reverting it returns to 0.
+      - name: Trellis immutability (R2)
+        run: pnpm check:trellis
+
+      - name: Upload artifacts
+        # Runs even when an earlier step failed: a packaging or e2e failure is
+        # exactly when the built output is worth inspecting.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gomentor-${{ matrix.os }}
+          # `dist/` is electron-builder's output. `if-no-files-found: ignore`
+          # rather than `error`, because this runs with `always()` and a failure
+          # before packaging legitimately leaves nothing to upload — erroring
+          # there would replace the real failure with a misleading one.
+          path: apps/desktop/dist
+          if-no-files-found: ignore
+          retention-days: 7
