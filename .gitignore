@@ -6,10 +6,18 @@ coverage/
 
 # Bundled engine artifacts: fetched by scripts/fetch-*.ts, never committed.
 # Checksum manifests ARE committed; the binaries and weights are not.
-apps/desktop/resources/katago/
-apps/desktop/resources/weights/
-apps/desktop/resources/readboard/
+#
+# `/*` and not `/`, deliberately. Excluding the directory itself makes every
+# negation below unreachable — git will not re-include a file whose parent
+# directory is excluded — so the placeholder READMEs went untracked, the
+# directories did not exist in a fresh clone, and electron-builder skipped the
+# matching `extraResources` entries silently. That is the exact defect the
+# READMEs were added to prevent. Measured with `git check-ignore -v`.
+apps/desktop/resources/katago/*
+apps/desktop/resources/weights/*
+apps/desktop/resources/readboard/*
 !apps/desktop/resources/**/*.manifest.json
+!apps/desktop/resources/**/README.md
 
 # Local env / editor
 .env

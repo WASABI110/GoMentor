@@ -25,7 +25,10 @@
     "e2e": "pnpm -F @gomentor/desktop e2e",
     "check:licenses": "tsx scripts/check-licenses.ts",
     "check:i18n": "tsx scripts/check-i18n.ts",
-    "check:trellis": "git diff --exit-code -- .trellis .claude .codex .qoder .agents AGENTS.md"
+    "check:trellis": "git diff --exit-code -- .trellis .claude .codex .qoder .agents AGENTS.md",
+    "fetch:katago": "tsx scripts/fetch-katago.ts",
+    "fetch:weights": "tsx scripts/fetch-weights.ts",
+    "make:icon": "tsx scripts/make-icon.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
