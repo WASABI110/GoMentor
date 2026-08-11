@@ -64,10 +64,16 @@ async function menuLabels(app: ElectronApplication): Promise<string[]> {
 
 for (const locale of ['zh-CN', 'en'] as const) {
   test.describe(`a build launched with ui.locale = ${locale}`, () => {
-    const profile = makeUserDataDir()
+    // Created in `beforeAll`, not in this describe body. Playwright loads a spec
+    // file twice — once to collect tests, once to run them — so a call out here
+    // also runs during collection, and that directory has no `afterAll` to remove
+    // it. Measured with `--list`, which runs nothing and still left two profiles
+    // behind; see `makeUserDataDir`.
+    let profile: { dir: string; cleanup: () => void }
     let app: ElectronApplication
 
     test.beforeAll(async () => {
+      profile = makeUserDataDir()
       // A minimal document, not a full one: `settingsSchema` fills every other
       // field with its default, so this stays valid as settings are added. Written
       // before the first launch so main reads it during startup rather than

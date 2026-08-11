@@ -91,6 +91,9 @@ export interface LaunchOptions {
    * developer's real profile — making the result depend on machine state — or
    * write settings and secrets into it, which for a test that stores a fake API
    * key is not acceptable.
+   *
+   * Omitting it does *not* mean "the default profile" — `launchApp` allocates a
+   * throwaway one. Only pass this when two launches must share state.
    */
   userDataDir?: string
   /** Extra argv for the app under test. Appended after `OUT_MAIN`. */
@@ -100,26 +103,66 @@ export interface LaunchOptions {
 }
 
 /**
- * Launches the built app.
+ * Launches the built app, always against a profile no other spec can see.
  *
  * `--user-data-dir` goes in `args` after `OUT_MAIN` because Electron parses its
  * own switches from the full argv regardless of position; keeping the entry point
  * first is what makes the argv readable in a process list.
+ *
+ * ## Why isolation is the default and not opt-in
+ *
+ * It used to be opt-in, and that was a real cross-spec leak rather than a
+ * hypothetical one. A launch with no `userDataDir` inherits Electron's default
+ * profile for an unpackaged app — `%APPDATA%/Electron` — which is one directory
+ * shared by every spec and every run on the machine. `ipc-events` writes
+ * `llm.kind: 'local'` through `settings:set` to get a keyless provider;
+ * `preload-boundary` then booted expecting default settings and failed with
+ * `LLM_UNREACHABLE` where it asserts `LLM_NO_KEY`. Measured: the file at
+ * `%APPDATA%/Electron/settings.json` held `kind: local` and the stalling server's
+ * port after the run.
+ *
+ * That failure is the mild version. The same directory is where a spec's imported
+ * games and `safeStorage` secrets land, it survives between runs, and it makes
+ * every result depend on which spec happened to run first. Order-dependence that
+ * only appears once two specs write the same key is exactly the kind of thing that
+ * passes locally and fails in CI — so the safe form is the default, and sharing is
+ * what has to be asked for.
+ *
+ * The directory is removed when the app closes, so no caller has to remember. Specs
+ * that need a profile to outlive one launch still use `makeUserDataDir` and pass it
+ * in, which is the case the option now exists for.
  */
 export async function launchApp(
   options: LaunchOptions = {},
 ): Promise<ElectronApplication> {
   assertBuilt()
 
+  const shared = options.userDataDir !== undefined
+  // Held so the `close` handler below can remove it. When the caller supplied the
+  // directory, it owns the lifetime and nothing here deletes it.
+  const profile = shared ? null : makeUserDataDir()
+  const userDataDir = options.userDataDir ?? profile?.dir
+
   const args = [OUT_MAIN]
-  if (options.userDataDir !== undefined) {
-    args.push(`--user-data-dir=${options.userDataDir}`)
+  if (userDataDir !== undefined) {
+    args.push(`--user-data-dir=${userDataDir}`)
   }
   if (options.args !== undefined) {
     args.push(...options.args)
   }
 
-  return electron.launch({ args, env: launchEnv(options.env) })
+  const app = await electron.launch({ args, env: launchEnv(options.env) })
+
+  if (profile !== null) {
+    // On `close` rather than in an `afterEach`: this module cannot register hooks
+    // for specs it does not know about, and a spec that forgot one would silently
+    // go back to leaking.
+    app.on('close', () => {
+      profile.cleanup()
+    })
+  }
+
+  return app
 }
 
 /**
@@ -144,6 +187,19 @@ export async function firstPage(app: ElectronApplication): Promise<Page> {
  * a spec that launches twice against one directory must remove it after the
  * *second* launch, and a hook hidden in the harness could not know that. The
  * caller owning cleanup keeps the ordering visible where it matters.
+ *
+ * ## Call this inside a hook, not at module scope
+ *
+ * `makeUserDataDir()` creates the directory when it is *called*, and Playwright
+ * loads a spec file twice: once to collect the tests and again to run them. A call
+ * in a `describe` body therefore runs during collection too, and that copy has no
+ * `afterAll` behind it — measured with `--list`, which runs no tests at all and
+ * still left two `gomentor-e2e-*` directories in temp.
+ *
+ * So `const profile = makeUserDataDir()` beside the tests leaks one directory per
+ * describe per run. Call it in `beforeAll` and keep the handle in a `let`. Specs
+ * that just need isolation should not call it at all — `launchApp` allocates and
+ * removes a profile on its own.
  */
 export function makeUserDataDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'gomentor-e2e-'))
