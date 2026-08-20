@@ -1,19 +1,23 @@
 import { useTranslation } from 'react-i18next'
+import { useState } from 'react'
+import type { Coord } from '@gomentor/shared'
 import { positionAt, useGameStore } from '../state/gameStore'
 import { ErrorNotice } from '../components/ErrorNotice'
+import { Board } from '../components/Board'
 
 /**
- * The board panel: navigation, and the derived position it describes.
+ * The board panel: navigation, and the rendered board it describes.
  *
- * ## No canvas yet, deliberately
+ * The position is derived from `(game, cursor)` on every render, so the canvas has
+ * a single source to draw and no cache of its own to fall out of step. The stone
+ * counts below are that derivation made visible, which is also what lets an e2e
+ * spec assert navigation without reading pixels.
  *
- * `Board.tsx` — two canvases, DPR-aware, cancellable animations — is its own piece
- * of work with its own acceptance criteria (A3, against reference positions at
- * three board sizes). What this panel establishes is the layer under it: that the
- * position is *derived* from `(game, cursor)` on every render, so the canvas will
- * have a single source to draw and no cache of its own to fall out of step. The
- * stone counts below are that derivation made visible, which is also what lets an
- * e2e spec assert navigation without reading pixels.
+ * ## Clicking the board does not place a stone in M1
+ *
+ * A3/A4 are about reviewing an imported game, not playing a new one. Clicking an
+ * intersection in M1 only sets the hover ghost; the move tree (M2) will turn clicks
+ * into moves.
  */
 export function BoardPanel(): React.JSX.Element {
   const { t } = useTranslation(['board', 'common', 'analysis'])
@@ -25,6 +29,8 @@ export function BoardPanel(): React.JSX.Element {
   const stepBackward = useGameStore((state) => state.stepBackward)
   const stepForward = useGameStore((state) => state.stepForward)
   const seekToEnd = useGameStore((state) => state.toEnd)
+
+  const [hover, setHover] = useState<Coord | null>(null)
 
   // Subscribed to `game` and `cursor` above, so this recomputes exactly when one
   // of them changes and never holds a stale copy. `replay` of a 300-move record
@@ -77,6 +83,17 @@ export function BoardPanel(): React.JSX.Element {
               {t('board:pass')}
             </p>
           )}
+
+          <Board
+            size={game.meta.boardSize}
+            position={replayed.position}
+            lastMove={replayed.lastMove}
+            captured={replayed.captured}
+            hover={hover}
+            onHover={setHover}
+            showCoordinates
+            animationsEnabled
+          />
 
           <nav className="board-nav" aria-label={t('board:nav.hint')}>
             <button
