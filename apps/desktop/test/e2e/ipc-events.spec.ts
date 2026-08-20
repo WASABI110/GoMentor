@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
-import { firstPage, launchApp } from './harness'
+import { firstPage, launchApp, useLocalProvider } from './harness'
 
 /**
  * A real record from the corpus, for the one test that needs the library to be
@@ -147,34 +147,12 @@ function startSilentServer(): Promise<{ port: number; close: () => Promise<void>
 }
 
 /**
- * Points the app at that server, so `send` needs no API key.
- *
- * Written through `settings:set` rather than into `settings.json` before launch:
- * this is the same path the settings panel will take, and it additionally proves
- * the write reaches the running `LlmService` — `settings.update` calls
- * `invalidate()`, so the next send rebuilds the provider from the new document
- * instead of reusing the cached cloud one that threw.
- */
-async function useLocalProvider(page: Page, port: number): Promise<void> {
-  const ok = await page.evaluate(async (localPort) => {
-    const result = await window.gomentor.settings.set({
-      patch: {
-        llm: { kind: 'local', baseUrl: `http://127.0.0.1:${String(localPort)}/v1` },
-      },
-    })
-    return result.ok
-  }, port)
-  // Fail loudly here rather than letting `startRun` time out on an empty
-  // `data-run-id`, which would point at the wrong thing.
-  expect(ok).toBe(true)
-}
-
-/**
  * Sends a message through the UI and returns the runId main issued for it.
  *
  * Switches to the local provider first, because every caller needs that and a
  * caller who forgot would get a timeout on an empty `data-run-id` pointing at the
- * wrong cause.
+ * wrong cause. That switch lives in `harness.ts` now that `smoke.spec.ts` needs it
+ * too — with the reasons, which are the part a copy would drop.
  *
  * The run is left streaming on purpose. It is never answered and never cancelled:
  * the deltas the tests below assert on are emitted from main, and a run that

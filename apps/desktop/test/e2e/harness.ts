@@ -181,6 +181,42 @@ export async function firstPage(app: ElectronApplication): Promise<Page> {
 }
 
 /**
+ * Points the running app at a local OpenAI-compatible server on `port`.
+ *
+ * Shared because two specs need it and the *reasons* are what would get lost in a
+ * copy. With the default `kind: 'cloud'` and no API key, `send` throws `LLM_NO_KEY`
+ * at provider construction — before a request exists and before a runId is issued —
+ * and a CI runner has no key and never will. The keyless `local` path is therefore
+ * the only one an automated LLM test can use, and it is a real user path rather than
+ * a test hook.
+ *
+ * Written through `settings:set` rather than into `settings.json` before launch, for
+ * a second measured reason: `settings.update` calls `invalidate()`, so the next send
+ * rebuilds the provider from the new document instead of reusing the cached cloud one
+ * that threw. Pre-seeding the file would test a path the settings panel does not take.
+ *
+ * Throws rather than returning a boolean so a failed write reads as a failed write.
+ * The alternative was letting the caller time out waiting for a runId that could
+ * never arrive, which points at the wrong thing.
+ */
+export async function useLocalProvider(page: Page, port: number): Promise<void> {
+  const ok = await page.evaluate(async (localPort) => {
+    const result = await window.gomentor.settings.set({
+      patch: {
+        llm: { kind: 'local', baseUrl: `http://127.0.0.1:${String(localPort)}/v1` },
+      },
+    })
+    return result.ok
+  }, port)
+
+  if (!ok) {
+    throw new Error(
+      `settings:set rejected the local provider patch for port ${String(port)}`,
+    )
+  }
+}
+
+/**
  * A fresh directory for `userDataDir`, and the function that removes it.
  *
  * Returned as a pair rather than registered with an `afterAll` inside this module:
