@@ -1,0 +1,64 @@
+:root {
+  /* Primitive palette. Tokens are named by role, not by color, so a light
+     theme can redefine the roles without touching component CSS. */
+
+  /* Background layers */
+  --color-bg: #1c1a17;
+  --color-panel: #242119;
+  --color-surface: #1a1813;
+  --color-surface-hover: #2e2a20;
+
+  /* Text */
+  --color-text: #e8e2d5;
+  --color-text-muted: #8a8578;
+  --color-text-inverse: #1c1a17;
+
+  /* Accents and borders */
+  --color-accent: #c9a227;
+  --color-accent-hover: #d6b03d;
+  --color-border: #3a352c;
+  --color-border-strong: #5a5245;
+
+  /* Status */
+  --color-error-bg: #3a241c;
+  --color-error-border: #6b3a28;
+  --color-error-text: #f0d2c0;
+  --color-success: #7ca668;
+
+  /* Convenience aliases: components use the semantic names below. */
+  --bg: var(--color-bg);
+  --panel: var(--color-panel);
+  --surface: var(--color-surface);
+  --surface-hover: var(--color-surface-hover);
+  --text: var(--color-text);
+  --muted: var(--color-text-muted);
+  --accent: var(--color-accent);
+  --accent-hover: var(--color-accent-hover);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Typography */
+  --font-stack: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 14px;
+  --font-size-xl: 16px;
+
+  /* Radius */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+}

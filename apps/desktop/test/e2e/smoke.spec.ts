@@ -177,10 +177,25 @@ test.describe('the built app launches, shows three panels, and answers', () => {
     const shell = page.getByTestId('app-shell')
     expect(await shell.evaluate((node) => getComputedStyle(node).display)).toBe('grid')
 
-    const columns = await shell.evaluate(
-      (node) => getComputedStyle(node).gridTemplateColumns,
+    // With resize handles, the grid has five tracks: library, handle, board,
+    // handle, teacher. `getComputedStyle` resolves `1fr` to a pixel value, so the
+    // assertion uses parsed widths rather than exact strings.
+    const parsePx = (value: string): number => Number.parseFloat(value.replace(/px$/, ''))
+    const columns = await shell.evaluate((node) =>
+      getComputedStyle(node).gridTemplateColumns.split(/\s+/).filter((track) => track !== ''),
     )
-    expect(columns.split(/\s+/).filter((track) => track !== '')).toHaveLength(3)
+    expect(columns).toHaveLength(5)
+
+    const widths = columns.map(parsePx)
+    // The three content panels must have meaningful width.
+    expect(widths[0]).toBeGreaterThan(100)
+    expect(widths[2]).toBeGreaterThan(100)
+    expect(widths[4]).toBeGreaterThan(100)
+    // The two resize handles are the fixed narrow tracks between them.
+    expect(widths[1]).toBeGreaterThan(0)
+    expect(widths[1]).toBeLessThan(20)
+    expect(widths[3]).toBeGreaterThan(0)
+    expect(widths[3]).toBeLessThan(20)
   })
 
   test('the window renders with no console error or unhandled rejection', async () => {

@@ -19,8 +19,12 @@
   "library": {
     "title": "棋谱库",
     "empty": "还没有棋谱,把 SGF 文件拖进来即可导入。",
+    "dropHere": "拖放 SGF 文件到此处导入。",
     "import": "导入棋谱…",
     "count": "共 {{count}} 局",
+    "importedCount": "已导入 {{count}} 局",
+    "duplicateCount": "重复 {{count}} 局",
+    "failedCount": "失败 {{count}} 局",
     "searchPlaceholder": "搜索对局者、日期…",
     "column": {
       "players": "对局",
@@ -45,5 +49,9 @@
     "fullScreen": "全屏",
     "help": "帮助",
     "revealLogs": "打开日志目录"
+  },
+  "resize": {
+    "library": "调整棋谱库面板大小",
+    "teacher": "调整教练面板大小"
   }
 }

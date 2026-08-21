@@ -4,6 +4,8 @@ import type { Coord } from '@gomentor/shared'
 import { positionAt, useGameStore } from '../state/gameStore'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Board } from '../components/Board'
+import { MoveTree } from '../components/MoveTree'
+import { EngineStatus } from '../components/EngineStatus'
 
 /**
  * The board panel: navigation, and the rendered board it describes.
@@ -95,46 +97,18 @@ export function BoardPanel(): React.JSX.Element {
             animationsEnabled
           />
 
-          <nav className="board-nav" aria-label={t('board:nav.hint')}>
-            <button
-              type="button"
-              data-testid="nav-first"
-              aria-label={t('board:nav.first')}
-              onClick={seekToStart}
-            >
-              ⏮
-            </button>
-            <button
-              type="button"
-              data-testid="nav-prev"
-              aria-label={t('board:nav.previous')}
-              onClick={stepBackward}
-            >
-              ◀
-            </button>
-            <button
-              type="button"
-              data-testid="nav-next"
-              aria-label={t('board:nav.next')}
-              onClick={stepForward}
-            >
-              ▶
-            </button>
-            <button
-              type="button"
-              data-testid="nav-last"
-              aria-label={t('board:nav.last')}
-              onClick={seekToEnd}
-            >
-              ⏭
-            </button>
-          </nav>
+          <MoveTree
+            cursor={cursor}
+            total={game.moves.length}
+            onFirst={seekToStart}
+            onPrevious={stepBackward}
+            onNext={stepForward}
+            onLast={seekToEnd}
+          />
         </>
       )}
 
-      <p className="engine-status" data-testid="engine-status">
-        {t('analysis:engine.label')}: {t('analysis:engine.status.unavailable')}
-      </p>
+      <EngineStatus />
     </main>
   )
 }

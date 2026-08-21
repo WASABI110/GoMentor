@@ -126,16 +126,16 @@ No Electron dependency in this stage. Fully testable headless.
 - [ ] `src/renderer/src/state/{gameStore,chatStore,settingsStore,libraryStore}.ts` — zustand
 - [ ] `src/renderer/src/hooks/useIpcEvent.ts` — typed subscription hook
 - [ ] `src/renderer/src/main.tsx` — React root: i18n, theme, error boundary
-- [ ] `src/renderer/src/App.tsx` — three-panel resizable shell, **layout persisted** (A2)
-- [ ] `src/renderer/src/components/Board.tsx` — **two canvases** (static/dynamic), DPR-aware, click/hover, ≤120ms cancellable+skippable animations (A3, A4)
-- [ ] `src/renderer/src/components/BoardOverlay.tsx` — overlay layer scaffold (M2 fills it)
-- [ ] `src/renderer/src/components/GameList.tsx` — list + drag-drop import target (A3)
-- [ ] `src/renderer/src/components/MoveTree.tsx` — linear nav in M1; arrow-key stepping (A4)
+- [x] `src/renderer/src/App.tsx` — three-panel resizable shell, **layout persisted** (A2)
+- [x] `src/renderer/src/components/Board.tsx` — **two canvases** (static/dynamic), DPR-aware, click/hover, ≤120ms cancellable+skippable animations (A3, A4)
+- [x] `src/renderer/src/components/BoardOverlay.tsx` — overlay layer scaffold (M2 fills it)
+- [x] `src/renderer/src/components/GameList.tsx` — list + drag-drop import target (A3)
+- [x] `src/renderer/src/components/MoveTree.tsx` — linear nav in M1; arrow-key stepping (A4)
 - [ ] `src/renderer/src/components/TeacherChat.tsx` — streaming, cancel, markdown, legible errors (A11)
-- [ ] `src/renderer/src/components/EngineStatus.tsx` — badge; reads `unavailable` in M1 (A13)
-- [ ] `src/renderer/src/panels/SettingsPanel.tsx` — provider config + key entry (A10)
-- [ ] `src/renderer/src/components/ui/` — minimal primitives
-- [ ] `src/renderer/src/styles/` — theme tokens
+- [x] `src/renderer/src/components/EngineStatus.tsx` — badge; reads `unavailable` in M1 (A13)
+- [x] `src/renderer/src/panels/SettingsPanel.tsx` — provider config + key entry (A10)
+- [x] `src/renderer/src/components/ui/` — minimal primitives
+- [x] `src/renderer/src/styles/` — theme tokens
 
 **Gate**: A1–A4, A11–A13 pass by manual smoke.
 

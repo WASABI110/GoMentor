@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { useLibraryStore } from '../state/libraryStore'
 import { useGameStore } from '../state/gameStore'
-import { ErrorNotice } from '../components/ErrorNotice'
+import { GameList } from '../components/GameList'
 
 /**
- * The library list, and the button that imports into it.
+ * The library panel.
  *
  * ## Opening a row goes through `sgf:serialize`, not through the summary
  *
@@ -14,13 +14,22 @@ import { ErrorNotice } from '../components/ErrorNotice'
  * import takes. That round trip looks redundant and is not: it means there is
  * exactly one way a `Game` comes into existence in the renderer, so a projection
  * bug cannot show up on one path and not the other.
+ *
+ * ## Drag/drop is handled inside `GameList`
+ *
+ * Electron augments the `File` objects in a renderer `drop` event with a `path`
+ * property, so the import can run through `libraryStore.importFiles` directly.
+ * The panel only needs to pass the callback; the highlight state lives in the
+ * list component.
  */
 export function LibraryPanel(): React.JSX.Element {
-  const { t } = useTranslation(['common', 'board', 'errors'])
+  const { t } = useTranslation(['common'])
   const games = useLibraryStore((state) => state.games)
   const loading = useLibraryStore((state) => state.loading)
   const importing = useLibraryStore((state) => state.importing)
   const error = useLibraryStore((state) => state.error)
+  const lastImport = useLibraryStore((state) => state.lastImport)
+  const importFiles = useLibraryStore((state) => state.importFiles)
   const openGame = useGameStore((state) => state.open)
 
   async function handleImport(): Promise<void> {
@@ -29,7 +38,7 @@ export function LibraryPanel(): React.JSX.Element {
       useLibraryStore.setState({ error: dialog.error })
       return
     }
-    await useLibraryStore.getState().importFiles(dialog.data.filePaths)
+    await importFiles(dialog.data.filePaths)
   }
 
   async function handleOpen(gameId: string): Promise<void> {
@@ -41,59 +50,27 @@ export function LibraryPanel(): React.JSX.Element {
     await openGame(serialised.data.content)
   }
 
+  function handleDropFiles(filePaths: string[]): void {
+    void importFiles(filePaths)
+  }
+
   return (
     <aside className="panel panel--library" data-testid="library-panel">
       <h2>{t('common:library.title')}</h2>
-
-      <button
-        type="button"
-        className="button"
-        data-testid="library-import"
-        disabled={importing}
-        onClick={() => {
+      <GameList
+        games={games}
+        loading={loading}
+        importing={importing}
+        error={error}
+        lastImport={lastImport}
+        onImport={() => {
           void handleImport()
         }}
-      >
-        {importing ? t('common:loading') : t('common:library.import')}
-      </button>
-
-      {error !== null && <ErrorNotice error={error} />}
-
-      {loading && games.length === 0 ? (
-        <p className="placeholder">{t('common:loading')}</p>
-      ) : games.length === 0 ? (
-        <p className="placeholder">{t('common:library.empty')}</p>
-      ) : (
-        <>
-          <p className="library-count" data-testid="library-count">
-            {t('common:library.count', { count: games.length })}
-          </p>
-          <ul className="library-list" data-testid="library-list">
-            {games.map((game) => (
-              <li key={game.id}>
-                <button
-                  type="button"
-                  className="library-row"
-                  onClick={() => {
-                    void handleOpen(game.id)
-                  }}
-                >
-                  <span className="library-row__players">
-                    {game.blackName ?? t('common:library.unknownPlayer')}
-                    {' — '}
-                    {game.whiteName ?? t('common:library.unknownPlayer')}
-                  </span>
-                  <span className="library-row__meta">
-                    {game.date ?? t('common:library.unknownDate')} ·{' '}
-                    {String(game.boardSize)}×{String(game.boardSize)} ·{' '}
-                    {t('board:moveNumber', { n: game.moveCount })}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+        onOpen={(gameId) => {
+          void handleOpen(gameId)
+        }}
+        onDropFiles={handleDropFiles}
+      />
     </aside>
   )
 }

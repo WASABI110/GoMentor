@@ -1,13 +1,5 @@
 /* Stage 1 minimal styling. Stage 6 introduces theme tokens in styles/. */
-
-:root {
-  --bg: #1c1a17;
-  --panel: #242119;
-  --border: #3a352c;
-  --text: #e8e2d5;
-  --muted: #8a8578;
-  --accent: #c9a227;
-}
+@import './theme.css';
 
 * {
   box-sizing: border-box;
@@ -31,6 +23,20 @@ body {
   display: grid;
   grid-template-columns: 260px 1fr 360px;
   height: 100%;
+}
+
+.resize-handle {
+  width: 8px;
+  cursor: col-resize;
+  background: var(--border);
+  opacity: 0.4;
+  user-select: none;
+  touch-action: none;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  opacity: 0.8;
 }
 
 .panel {
@@ -62,6 +68,121 @@ body {
   color: #8a8578;
 }
 
+.move-tree {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  outline: none;
+}
+
+.move-tree:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 4px;
+}
+
+.move-tree__counter {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.move-tree__controls {
+  display: flex;
+  gap: 6px;
+}
+
+.move-tree__button {
+  min-width: 32px;
+  padding: 4px 8px;
+  font-size: 14px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.move-tree__button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-panel h2 {
+  margin: 0;
+}
+
+.settings-section {
+  padding: 12px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.settings-section legend {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.settings-field:last-child {
+  margin-bottom: 0;
+}
+
+.settings-field--row {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.settings-field--row input {
+  flex: 1;
+}
+
+.settings-field span {
+  font-size: 13px;
+}
+
+.settings-field input,
+.settings-field select {
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: #1a1813;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.settings-key-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.settings-save {
+  align-self: flex-start;
+}
+
 .engine-status {
   font-size: 12px;
   color: #8a8578;
@@ -82,17 +203,19 @@ body {
   border: 0;
 }
 
+.ui-button,
 .button {
   padding: 6px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
+.ui-button:disabled,
 .button:disabled {
   color: var(--muted);
   cursor: default;
@@ -106,6 +229,25 @@ body {
   background: #3a241c;
   border: 1px solid #6b3a28;
   border-radius: 4px;
+}
+
+.game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.game-list--drag-over,
+.game-list--drag-over .placeholder {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.game-list__empty {
+  padding: 24px 12px;
+  text-align: center;
 }
 
 .library-count {
@@ -182,6 +324,29 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.teacher-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.teacher-tab {
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.teacher-tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .chat-log {

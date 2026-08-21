@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useChatStore } from '../state/chatStore'
 import { useGameStore } from '../state/gameStore'
 import { ErrorNotice } from '../components/ErrorNotice'
+import { SettingsPanel } from './SettingsPanel'
 
 /**
  * The teacher conversation.
@@ -25,6 +26,7 @@ import { ErrorNotice } from '../components/ErrorNotice'
 export function TeacherPanel(): React.JSX.Element {
   const { t } = useTranslation(['teacher', 'common'])
   const [draft, setDraft] = useState('')
+  const [view, setView] = useState<'chat' | 'settings'>('chat')
 
   const messages = useChatStore((state) => state.messages)
   const streaming = useChatStore((state) => state.streaming)
@@ -69,11 +71,38 @@ export function TeacherPanel(): React.JSX.Element {
       // user content.
       data-run-id={activeRunId ?? ''}
     >
-      <h2>{t('teacher:title')}</h2>
+      <h2>{view === 'settings' ? t('settings:title') : t('teacher:title')}</h2>
 
-      {error !== null && <ErrorNotice error={error} />}
+      <div className="teacher-tabs">
+        <button
+          type="button"
+          className={`teacher-tab ${view === 'chat' ? 'teacher-tab--active' : ''}`}
+          data-testid="teacher-tab-chat"
+          onClick={() => {
+            setView('chat')
+          }}
+        >
+          {t('teacher:title')}
+        </button>
+        <button
+          type="button"
+          className={`teacher-tab ${view === 'settings' ? 'teacher-tab--active' : ''}`}
+          data-testid="teacher-tab-settings"
+          onClick={() => {
+            setView('settings')
+          }}
+        >
+          {t('settings:title')}
+        </button>
+      </div>
 
-      {messages.length === 0 && streaming === '' ? (
+      {view === 'settings' ? (
+        <SettingsPanel />
+      ) : (
+        <>
+          {error !== null && <ErrorNotice error={error} />}
+
+          {messages.length === 0 && streaming === '' ? (
         <p className="placeholder" data-testid="teacher-empty">
           {t('teacher:empty')}
         </p>
@@ -151,6 +180,8 @@ export function TeacherPanel(): React.JSX.Element {
           </button>
         )}
       </div>
+    </>
+  )}
     </aside>
   )
 }

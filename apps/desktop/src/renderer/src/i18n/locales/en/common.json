@@ -19,8 +19,12 @@
   "library": {
     "title": "Library",
     "empty": "No games yet — drop an SGF file here to import it.",
+    "dropHere": "Drop SGF files here to import them.",
     "import": "Import games…",
     "count": "{{count}} games",
+    "importedCount": "{{count}} imported",
+    "duplicateCount": "{{count}} duplicates",
+    "failedCount": "{{count}} failed",
     "searchPlaceholder": "Search players, dates…",
     "column": {
       "players": "Players",
@@ -45,5 +49,9 @@
     "fullScreen": "Toggle Full Screen",
     "help": "Help",
     "revealLogs": "Reveal Logs"
+  },
+  "resize": {
+    "library": "Resize library panel",
+    "teacher": "Resize teacher panel"
   }
 }
