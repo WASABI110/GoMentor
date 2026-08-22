@@ -180,9 +180,12 @@ test.describe('the built app launches, shows three panels, and answers', () => {
     // With resize handles, the grid has five tracks: library, handle, board,
     // handle, teacher. `getComputedStyle` resolves `1fr` to a pixel value, so the
     // assertion uses parsed widths rather than exact strings.
-    const parsePx = (value: string): number => Number.parseFloat(value.replace(/px$/, ''))
+    const parsePx = (value: string): number =>
+      Number.parseFloat(value.replace(/px$/, ''))
     const columns = await shell.evaluate((node) =>
-      getComputedStyle(node).gridTemplateColumns.split(/\s+/).filter((track) => track !== ''),
+      getComputedStyle(node)
+        .gridTemplateColumns.split(/\s+/)
+        .filter((track) => track !== ''),
     )
     expect(columns).toHaveLength(5)
 

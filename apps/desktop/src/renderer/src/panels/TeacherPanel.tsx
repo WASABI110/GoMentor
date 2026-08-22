@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useChatStore } from '../state/chatStore'
 import { useGameStore } from '../state/gameStore'
 import { ErrorNotice } from '../components/ErrorNotice'
+import { Button } from '../components/ui'
 import { SettingsPanel } from './SettingsPanel'
 
 /**
@@ -103,85 +104,88 @@ export function TeacherPanel(): React.JSX.Element {
           {error !== null && <ErrorNotice error={error} />}
 
           {messages.length === 0 && streaming === '' ? (
-        <p className="placeholder" data-testid="teacher-empty">
-          {t('teacher:empty')}
-        </p>
-      ) : (
-        <ol className="chat-log" data-testid="chat-log">
-          {messages.map((message) => (
-            <li key={message.id} className={`chat-turn chat-turn--${message.role}`}>
-              <span className="chat-turn__role">
-                {message.role === 'user'
-                  ? t('teacher:role.user')
-                  : t('teacher:role.assistant')}
-              </span>
-              <span className="chat-turn__content">{message.content}</span>
-            </li>
-          ))}
-          {streaming !== '' && (
-            <li className="chat-turn chat-turn--assistant" data-testid="chat-streaming">
-              <span className="chat-turn__role">{t('teacher:role.assistant')}</span>
-              <span className="chat-turn__content">{streaming}</span>
-            </li>
+            <p className="placeholder" data-testid="teacher-empty">
+              {t('teacher:empty')}
+            </p>
+          ) : (
+            <ol className="chat-log" data-testid="chat-log">
+              {messages.map((message) => (
+                <li key={message.id} className={`chat-turn chat-turn--${message.role}`}>
+                  <span className="chat-turn__role">
+                    {message.role === 'user'
+                      ? t('teacher:role.user')
+                      : t('teacher:role.assistant')}
+                  </span>
+                  <span className="chat-turn__content">{message.content}</span>
+                </li>
+              ))}
+              {streaming !== '' && (
+                <li
+                  className="chat-turn chat-turn--assistant"
+                  data-testid="chat-streaming"
+                >
+                  <span className="chat-turn__role">{t('teacher:role.assistant')}</span>
+                  <span className="chat-turn__content">{streaming}</span>
+                </li>
+              )}
+            </ol>
           )}
-        </ol>
-      )}
 
-      {busy && streaming === '' && (
-        <p className="placeholder" data-testid="teacher-thinking">
-          {t('teacher:thinking')}
-        </p>
-      )}
+          {busy && streaming === '' && (
+            <p className="placeholder" data-testid="teacher-thinking">
+              {t('teacher:thinking')}
+            </p>
+          )}
 
-      <div className="chat-compose">
-        <textarea
-          className="chat-input"
-          data-testid="chat-input"
-          rows={3}
-          value={draft}
-          placeholder={t('teacher:placeholder')}
-          onChange={(event) => {
-            setDraft(event.target.value)
-          }}
-          onKeyDown={(event) => {
-            // Enter sends, Shift+Enter breaks the line. `isComposing` guards the
-            // IME: a Chinese or Japanese user pressing Enter to accept candidate
-            // characters would otherwise submit a half-typed prompt.
-            if (
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault()
-              submit()
-            }
-          }}
-        />
-        {busy ? (
-          <button
-            type="button"
-            className="button"
-            data-testid="chat-stop"
-            onClick={() => {
-              void cancel()
-            }}
-          >
-            {t('teacher:stop')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="button"
-            data-testid="chat-send"
-            disabled={draft.trim() === ''}
-            onClick={submit}
-          >
-            {t('teacher:send')}
-          </button>
-        )}
-      </div>
-    </>
-  )}
+          <div className="chat-compose">
+            <textarea
+              className="chat-input"
+              data-testid="chat-input"
+              rows={3}
+              value={draft}
+              placeholder={t('teacher:placeholder')}
+              onChange={(event) => {
+                setDraft(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                // Enter sends, Shift+Enter breaks the line. `isComposing` guards the
+                // IME: a Chinese or Japanese user pressing Enter to accept candidate
+                // characters would otherwise submit a half-typed prompt.
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault()
+                  submit()
+                }
+              }}
+            />
+            {busy ? (
+              <Button
+                type="button"
+                className="button"
+                data-testid="chat-stop"
+                onClick={() => {
+                  void cancel()
+                }}
+              >
+                {t('teacher:stop')}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="button"
+                data-testid="chat-send"
+                disabled={draft.trim() === ''}
+                onClick={submit}
+              >
+                {t('teacher:send')}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </aside>
   )
 }

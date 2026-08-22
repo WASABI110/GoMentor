@@ -12,8 +12,13 @@ import { Button, Input, Select } from '../components/ui'
  *
  * `settingsStore.update` writes the whole patch to main and waits for the saved
  * document to come back. If every keystroke called it, the user would incur an
- * IPC round trip per character and the locale would reload on every letter. The
- * form holds local state and only commits when the user presses save.
+ * IPC round trip per character. The LLM fields therefore hold local state and
+ * only commit when the user presses save.
+ *
+ * Locale is different: it is a `<select>`, so there is no keystroke storm, and
+ * changing it immediately makes the rest of the UI match the new language. It
+ * is therefore read straight from `settings.ui.locale` rather than from the
+ * local draft, so the select stays in sync with the document main owns.
  *
  * ## Why the API key has its own channel
  *
@@ -41,6 +46,18 @@ export function SettingsPanel(): React.JSX.Element {
   const [keyInput, setKeyInput] = useState('')
   const [keySaved, setKeySaved] = useState(false)
 
+  // Clear the "saved" confirmation automatically, and clean up the timeout if the
+  // panel unmounts — otherwise a late setState would run on an unmounted component.
+  useEffect(() => {
+    if (!keySaved) return undefined
+    const timeout = setTimeout(() => {
+      setKeySaved(false)
+    }, 2000)
+    return () => {
+      clearTimeout(timeout)
+    }
+  }, [keySaved])
+
   // Initialise the draft once the document loads.
   useEffect(() => {
     if (settings !== null && draft === null) {
@@ -59,7 +76,9 @@ export function SettingsPanel(): React.JSX.Element {
   const currentSettings = settings
   const llm = draft.llm ?? currentSettings.llm
 
-  async function handleSave(event: React.SyntheticEvent<HTMLFormElement>): Promise<void> {
+  async function handleSave(
+    event: React.SyntheticEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault()
 
     const patch: Parameters<typeof update>[0] = {
@@ -84,9 +103,6 @@ export function SettingsPanel(): React.JSX.Element {
     if (result.ok) {
       setKeyInput('')
       setKeySaved(true)
-      setTimeout(() => {
-        setKeySaved(false)
-      }, 2000)
     }
   }
 
@@ -119,9 +135,11 @@ export function SettingsPanel(): React.JSX.Element {
           <span>{t('settings:ui.locale')}</span>
           <Select
             data-testid="settings-locale"
-            value={draft.ui?.locale ?? settings.ui.locale}
+            value={settings.ui.locale}
             onChange={(event) => {
-              void update({ ui: { locale: event.target.value as Settings['ui']['locale'] } })
+              void update({
+                ui: { locale: event.target.value as Settings['ui']['locale'] },
+              })
             }}
           >
             {(['zh-CN', 'en', 'ja', 'ko', 'th', 'vi'] as const).map((locale) => (

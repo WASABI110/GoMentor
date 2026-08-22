@@ -30,7 +30,11 @@ export interface GameListProps {
   loading: boolean
   importing: boolean
   error: ErrorEnvelope | null
-  lastImport: { imported: number; duplicates: number; failures: { filePath: string; error: ErrorEnvelope }[] } | null
+  lastImport: {
+    imported: number
+    duplicates: number
+    failures: { filePath: string; error: ErrorEnvelope }[]
+  } | null
   onOpen: (gameId: string) => void
   onImport: () => void
   onDropFiles: (filePaths: string[]) => void
