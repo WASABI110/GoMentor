@@ -36,9 +36,24 @@ import { launchApp, useLocalProvider } from './harness'
  * draws, and for the same reason.
  */
 
-/** The reply the mocked model streams, split so the assertion needs both frames. */
-const REPLY_FRAGMENTS = ['This corner ', 'is unsettled.'] as const
-const REPLY = REPLY_FRAGMENTS.join('')
+/**
+ * The reply the mocked model streams, split so the assertion needs both frames.
+ *
+ * It carries markdown (`**corner**`) and raw HTML (`<script>`) on purpose. The
+ * markdown half proves the assistant turn is rendered through the markdown
+ * parser rather than as plain text - the `strong` element only exists if the
+ * parser ran. The HTML half proves the security property the markdown component
+ * exists to keep: model output is untrusted, and no element the model names may
+ * come to exist in the DOM. Whether react-markdown drops the node or escapes it
+ * to visible text, the `script` locator must find nothing.
+ */
+const REPLY_FRAGMENTS = [
+  'This **corner** ',
+  'is unsettled.<script>alert(1)</script>',
+] as const
+
+/** The reply as a reader sees it once the markdown is rendered. */
+const REPLY_TEXT = 'This corner is unsettled.'
 
 /** The prompt typed into the composer, echoed back by the request assertion. */
 const PROMPT = 'why is this move bad'
@@ -223,13 +238,26 @@ test.describe('the built app launches, shows three panels, and answers', () => {
     // real message" looks like.
     const turns = page.getByTestId('chat-log').getByRole('listitem')
     await expect(turns).toHaveCount(2)
-    await expect(turns.nth(1)).toContainText(REPLY)
+    await expect(turns.nth(1)).toContainText(REPLY_TEXT)
+
+    // The markdown in the reply became an element. A plain-text renderer would
+    // show the literal `**corner**` and this locator would find nothing - which is
+    // also what would happen if the markdown component were dropped in a refactor
+    // and nobody re-read this test.
+    await expect(turns.nth(1).locator('strong')).toHaveText('corner')
+
+    // And the raw HTML in the reply became no element at all. Model output is
+    // untrusted input; the renderer's CSP would block a script from *running*, but
+    // the markdown component must not put one in the tree in the first place.
+    // Covers the same half of A11 that the header note on `TeacherChat.tsx`
+    // records: react elements out, raw HTML never rendered.
+    expect(await page.getByTestId('chat-log').locator('script').count()).toBe(0)
 
     // Both fragments, in order, as one string: the assertion above would also pass on
     // a renderer that dropped the first delta if the second happened to contain the
     // whole reply. This is the accumulation check.
     const assistant = (await turns.nth(1).innerText()).replace(/\s+/g, ' ')
-    expect(assistant).toContain(REPLY)
+    expect(assistant).toContain(REPLY_TEXT)
 
     // The run is over: the partial-answer node is gone and the panel no longer claims
     // an active run. Without this a stuck `streaming` state would pass everything
