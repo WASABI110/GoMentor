@@ -16,8 +16,8 @@ Guidelines for the **Electron renderer process** — React 19 + TypeScript, pres
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | Renderer layout, placement rules, forbidden imports | **Filled** |
 | [State Management](./state-management.md) | zustand stores, mirroring main-process state, derived state | **Filled** |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill during Stage 6 |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, IPC subscription patterns | To fill during Stage 6 |
+| [Component Guidelines](./component-guidelines.md) | UI primitives, forms, drag/drop, i18n | **Filled** |
+| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, IPC subscription, effect cleanup | **Filled** |
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill during Stage 6 |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill during Stage 6 |
 
