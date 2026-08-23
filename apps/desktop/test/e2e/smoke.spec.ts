@@ -22,9 +22,9 @@ import { launchApp, useLocalProvider } from './harness'
  *   flaky on a shared CI runner; Playwright's own timeout catches a window that never
  *   arrives, which is the failure that matters.
  * - **A2** is "three panels visible **and resizable**; layout persists across
- *   restart". Only the first clause is testable today: there is no resize handle yet
- *   (see `App.tsx` on `ui.panelWidths` being read but never written), so nothing here
- *   touches resizing or persistence.
+ *   restart". Only the first clause lives here. Resizing and restart persistence
+ *   moved to `panel-resize.spec.ts` when the handles landed - this spec's layout
+ *   assertion covers the track structure, that one covers the interaction.
  * - **A11** is streaming, cancel, and legible errors for wrong key and down server.
  *   This covers the happy path only. Cancel and the two error paths stay manual.
  *
@@ -214,6 +214,16 @@ test.describe('the built app launches, shows three panels, and answers', () => {
     expect(widths[1]).toBeLessThan(20)
     expect(widths[3]).toBeGreaterThan(0)
     expect(widths[3]).toBeLessThan(20)
+
+    // A13, machine half: the engine badge reads `unavailable` in M1 (no engine
+    // exists yet). Asserted through the status class rather than the text, so the
+    // check does not restate a translation: the class is set from the EngineStatus
+    // enum value itself, and a badge stuck on any other lifecycle state fails here
+    // regardless of locale. "The app remains fully usable" is the rest of the suite
+    // running against a build where no engine can ever start.
+    await expect(
+      page.getByTestId('engine-status').locator('.engine-status__value--unavailable'),
+    ).toBeVisible()
   })
 
   test('the window renders with no console error or unhandled rejection', async () => {
