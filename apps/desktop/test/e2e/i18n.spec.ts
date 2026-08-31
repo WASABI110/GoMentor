@@ -55,10 +55,20 @@ const MENU = {
  * that settled the `menu:setLabels` question — see `prd.md` R4.
  */
 async function menuLabels(app: ElectronApplication): Promise<string[]> {
-  return app.evaluate(({ Menu }) => {
+  return app.evaluate(({ Menu, app: electronApp }) => {
     const menu = Menu.getApplicationMenu()
     if (menu === null) return []
-    return menu.items.map((item) => item.label)
+    // macOS prepends the app menu - the one named after the application, holding
+    // About/Services/Hide/Quit by convention (`menu.ts` builds it with `label:
+    // app.name`). It is OS chrome whose label is the app's own name ("Electron"
+    // under the test binary, "GoMentor" when packaged), not one of the menus
+    // this spec asserts are translated. Compared against `app.name` itself so
+    // the filter and the builder can never disagree about what to call it,
+    // and no translated menu can be dropped by accident - none of ours is
+    // named after the app.
+    return menu.items
+      .filter((item) => item.label !== electronApp.name)
+      .map((item) => item.label)
   })
 }
 
