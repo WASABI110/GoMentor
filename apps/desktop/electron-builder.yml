@@ -71,6 +71,12 @@ linux:
       arch: [x64]
   category: Education
 
+# Update-feed metadata for electron-updater, and the publish target for the
+# future release pipeline. CI builds must pass `--publish never` (the `package`
+# script does): with CI=true, electron-builder defaults to publishing when a
+# draft release exists and, for the github provider, instantiates a publisher
+# even without a tag - which throws "GitHub Personal Access Token is not set"
+# because the workflow deliberately holds no token.
 publish:
   provider: github
   releaseType: prerelease
