@@ -260,6 +260,36 @@ A FAIL blocks the stage. If a criterion itself proves wrong, amend this PRD expl
 | A15 | A packaged (unsigned) installer is produced on each OS | CI artifact |
 | A16 | Every stage gate ran `trellis-check` then `gomentor-verify`, and every acceptance ID carries a recorded `PASS`/`NOT-APPLICABLE-YET` verdict with evidence — no ID left unjudged, no FAIL left open at the final gate | Verify agent reports (R12) |
 
+## Final-gate verdict record (A16)
+
+Recorded 2026-09-03. No FAIL open. Machine-verifiable IDs are PASS with the
+evidence below; the manual-smoke IDs are `NOT-APPLICABLE-YET` by rule (a
+criterion that has not been manually exercised is never `PASS`).
+
+| # | Verdict | Evidence |
+|---|---|---|
+| A1 | NOT-APPLICABLE-YET | Manual smoke (dev-mode visual, console clean) — user |
+| A2 | PASS | `apps/desktop/test/e2e/panel-resize.spec.ts`: real `page.mouse` drag (+120px, avoids `dragTo` handle-interception defect) + relaunch persistence on same profile |
+| A3 | NOT-APPLICABLE-YET | Manual smoke (drag gesture, 19×19/13×13/9×9 known positions) — user |
+| A4 | NOT-APPLICABLE-YET | Manual smoke (stepping feel, last-move marker, captures) — user |
+| A5 | PASS | `packages/core/test/sgf/round-trip.test.ts`, 65 real SGF files: variations, CJK comments, escaped `]`, unknown properties byte-preserved |
+| A6 | PASS | Typed-error unit tests: truncated / empty / non-SGF binary never hang |
+| A7 | PASS | fast-check identity properties, `internal→sgf→internal` and `internal→gtp→internal`, GTP skips `I`, all board sizes |
+| A8 | PASS | `packages/core/test/llm/provider.test.ts` vs mock HTTP server: delta order, cross-chunk tool-call accumulation, prompt abort, 429/500 typed errors, cloud + local factories |
+| A9 | PASS | `packages/shared/test/ipc.test.ts` (every channel ≥1 valid / ≥2 invalid) + `ipc-meta.test.ts` non-vacuity proven via scratch-copy channel addition (scratch under `node_modules/.cache`, not `tmpdir()` — cross-drive vitest self-resolution defect) |
+| A10 | PASS | Scripted headless check driving a real key through real `settings.json` + real `electron-log` file; Error-message / nested-object / URL-userinfo paths; shown to fail when `redact` bypassed |
+| A11 | NOT-APPLICABLE-YET | Manual smoke: streaming, cancel mid-stream, wrong-key and down-server legible errors — requires a reachable LLM endpoint; user |
+| A12 | PASS | `apps/desktop/test/e2e/i18n.spec.ts` (menu labels via `app.evaluate`, macOS app-menu filtered by `app.name`) + CI key-completeness gate asserting values differ across locales, not just key presence |
+| A13 | NOT-APPLICABLE-YET | Manual smoke (engine badge `unavailable`, app usable) — user |
+| A14 | PASS | CI run #4, commit `d32ef38`, 2026-09-03: `ubuntu-latest`, `windows-latest`, `macos-latest` all completed successfully, including the `Trellis immutability (R2)` step. <https://github.com/WASABI110/GoMentor/actions/runs/33638821552>. Fix history: repository detection via `package.json#repository` (`b423cb7`), macOS app-menu exclusion (`73046fc`), `--publish never` to bypass tokenless `GitHubPublisher` construction on CI (`d32ef38`) |
+| A15 | PASS | Same run, 3 artifacts uploaded (`gomentor-ubuntu-latest`, `gomentor-windows-latest`, `gomentor-macos-latest`, each `apps/desktop/dist`): unsigned NSIS `.exe`, `.dmg`, AppImage |
+| A16 | PASS | This record; per-stage `trellis-check` → `gomentor-verify` gates run through Stage 6 |
+
+Machine-coverage caveat recorded with evidence (design.md §StrictMode): the e2e
+bundle ships production React, so `StrictMode` double-invocation is inert and
+`useIpcEvent` teardown correctness is not machine-covered in M1. Tracked as a
+known gap, folded into the A1/A4 manual smoke.
+
 ## Out of scope for M1
 
 Deferred to later milestones, with no M1 design decision blocking them:
