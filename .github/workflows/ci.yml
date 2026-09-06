@@ -156,6 +156,13 @@ jobs:
         if: runner.os == 'Windows'
         run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch
 
+      # macOS runs the same spec's darwin branch: launch the packaged .app,
+      # open a record, assert the badge reports `unavailable` (no darwin
+      # engine asset exists — scope decision 6) and the record still renders.
+      - name: Packaged launch gate
+        if: runner.os == 'macOS'
+        run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch
+
       # R2's hard boundary, and it must be the last `run` step, after packaging.
       # It asserts that nothing above — install, typecheck, test, build, e2e,
       # package — wrote to the agent directories. Placed before `pnpm package` it
