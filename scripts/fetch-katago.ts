@@ -107,8 +107,12 @@ async function main(): Promise<void> {
     const targets = Object.keys(KATAGO_MANIFEST.engine.targets) as EngineTarget[]
     for (const target of targets) {
       console.log(await fetchTarget(target))
+      // Persist per target, not once at the end: a later target's failure (the
+      // Linux AppImage cannot extract on a non-Linux host — `--appimage-extract`
+      // executes the image) must not discard an earlier completed download's
+      // TOFU record, and a 40MB re-download is the cost of losing it.
+      persistRecordedChecksums()
     }
-    persistRecordedChecksums()
     return
   }
 
