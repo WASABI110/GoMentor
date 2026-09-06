@@ -12,6 +12,11 @@ out/
 coverage/
 pnpm-lock.yaml
 
+# Research scratch: verbatim upstream HTML/JSON snapshots used to source facts.
+# Raw fetched markup, not authored source — formatting or linting it would
+# corrupt the evidence and has no value.
+.research-tmp/
+
 # Bundled engine artifacts — fetched, not authored.
 apps/desktop/resources/katago/
 apps/desktop/resources/weights/

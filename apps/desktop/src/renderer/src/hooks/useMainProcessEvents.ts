@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useIpcEvent } from './useIpcEvent'
 import { useChatStore } from '../state/chatStore'
 import { useLibraryStore } from '../state/libraryStore'
+import { useAnalysisStore } from '../state/analysisStore'
 import type { EventPayload } from '@gomentor/shared'
 
 /**
@@ -16,10 +18,11 @@ import type { EventPayload } from '@gomentor/shared'
  * every subscription is the lifetime of the app, which is what these events
  * assume.
  *
- * It also makes the set auditable. `EVENTS` in `@gomentor/shared` has six
- * members; five are handled here and the sixth (`engine:status`) has no store to
- * write to yet, which is visible as an absence in one file rather than as
- * something you would have to grep six components to establish.
+ * It also makes the set auditable. Every member of `EVENTS` in `@gomentor/shared`
+ * is handled here, each writing exactly one store — `analysisStore` owns engine
+ * state because Stage 3 gave it two consumers (the badge and the board overlays),
+ * and a component-local subscription would have been a second write path to the
+ * same state.
  *
  * ## The registrar is passed as a bare property read
  *
@@ -37,6 +40,8 @@ export function useMainProcessEvents(): void {
   const receiveChunk = useChatStore((state) => state.receiveChunk)
   const finishRun = useChatStore((state) => state.finishRun)
   const failRun = useChatStore((state) => state.failRun)
+  const applyStatus = useAnalysisStore((state) => state.applyStatus)
+  const applyResult = useAnalysisStore((state) => state.applyResult)
 
   useIpcEvent(window.gomentor.onLibraryChanged, () => {
     // The payload's `reason` is deliberately ignored: import, delete and watch
@@ -57,6 +62,21 @@ export function useMainProcessEvents(): void {
     failRun(payload.runId, payload.error)
   })
 
+  useIpcEvent(window.gomentor.onEngineStatus, (payload) => {
+    // The only writer of the engine snapshot. The badge and the board overlays
+    // both render it, so the subscription lives here once rather than in each
+    // consumer — a component-local subscription would be a second write path to
+    // the same state and the two could interleave.
+    applyStatus(payload)
+  })
+
+  useIpcEvent(window.gomentor.onEngineAnalysis, (payload) => {
+    // No filtering beyond the store's own: main already dropped ticks for
+    // terminated/superseded query ids before emitting; `applyResult` is the
+    // second line of defence (gameId + cursor expectation).
+    applyResult(payload)
+  })
+
   useIpcEvent(window.gomentor.onMenuCommand, (payload) => {
     // One implementation of the open flow, reached from both the native menu
     // and the in-app button. Main emits rather than opening the dialog itself
@@ -73,6 +93,18 @@ export function useMainProcessEvents(): void {
     // `@gomentor/shared` makes `tsc` name this file for the missing entry.
     MENU_COMMANDS[payload.command]()
   })
+
+  // Seed the engine snapshot for first paint. `engine:status` events emitted
+  // before this hook mounted are gone, and the badge would otherwise show the
+  // store's `unavailable` default until main next re-emitted — which, on a
+  // healthy ready engine, might be never. `engine:info` is the synchronous
+  // snapshot channel, so one call closes the gap. Rejection is not handled:
+  // `register.ts` resolves every path, failure included, to the union.
+  useEffect(() => {
+    void window.gomentor.engine.info({}).then((result) => {
+      if (result.ok) applyStatus(result.data)
+    })
+  }, [applyStatus])
 }
 
 /**

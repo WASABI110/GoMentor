@@ -39,6 +39,8 @@ export type Scope =
   | 'main:sgf'
   | 'main:llm:service'
   | 'main:katago:process'
+  | 'main:katago:service'
+  | 'main:katago:session'
   | 'main:telemetry'
   | 'renderer'
 

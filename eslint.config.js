@@ -242,9 +242,16 @@ export default defineConfig(
   },
 
   {
-    files: ['scripts/**/*.{ts,mts}'],
+    files: ['scripts/**/*.{ts,mts}', 'apps/desktop/scripts/**/*.{ts,mts}'],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
+  },
+
+  {
+    // Package-local tool scripts (the engine benchmark) log measurements —
+    // number interpolation in the report lines is the job, not a type smell.
+    files: ['apps/desktop/scripts/**/*.{ts,mts}'],
+    rules: { '@typescript-eslint/restrict-template-expressions': 'off' },
   },
 
   prettier,

@@ -1,12 +1,28 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { MoveTreeBranchState } from '../state/gameStore'
+
+/** Re-exported prop shape — the single definition lives beside the path that decides it. */
+export type { MoveTreeBranchState } from '../state/gameStore'
 
 /**
- * Linear move navigation for M1.
+ * Linear move navigation for M1, plus Stage 4's read-only branch picker.
  *
- * M1 only needs a flat move list, not a branching tree, so this is a compact
- * control bar with keyboard support. The branching SGF tree will replace or
- * extend it in M2.
+ * M1 only needs a flat move list, not a branching tree, so the navigation is a
+ * compact control bar with keyboard support. The branching SGF tree stays in
+ * the AST in main; what the renderer gets is `Game.branches` — the option list
+ * at each mainline branch point — and choosing one re-parses through
+ * `gameStore.chooseBranch` (see the store for the identity/correlation
+ * decisions). Creating or editing variations is deliberately out of scope
+ * (`prd.md` scope decision 3).
+ *
+ * ## Why the picker lives here, at the cursor
+ *
+ * A branch point is only meaningful at the position it branches from: entry
+ * `c` of `branches` describes the alternatives to the move played at cursor
+ * `c + 1`. Rendering the picker wherever the cursor sits — rather than a
+ * permanent tree widget — keeps one branch question on screen at a time, which
+ * is the whole of M2's read-only scope.
  *
  * ## Keyboard controls
  *
@@ -24,6 +40,12 @@ import { useTranslation } from 'react-i18next'
  * audit tools even when an `aria-label` is present.
  */
 
+/**
+ * The branch choice on offer at the cursor's position, computed by the panel
+ * from `gameStore.branchStateAt` — `game.branches[cursor]` plus the child
+ * index the current variation path follows there.
+ */
+
 export interface MoveTreeProps {
   cursor: number
   total: number
@@ -31,6 +53,9 @@ export interface MoveTreeProps {
   onPrevious: () => void
   onNext: () => void
   onLast: () => void
+  /** Branch picker state for the cursor position, or null when not at a branch point. */
+  branch?: MoveTreeBranchState | null
+  onChooseBranch?: (childIndex: number) => void
 }
 
 export function MoveTree({
@@ -40,6 +65,8 @@ export function MoveTree({
   onPrevious,
   onNext,
   onLast,
+  branch = null,
+  onChooseBranch,
 }: MoveTreeProps): React.JSX.Element {
   const { t } = useTranslation(['board'])
   const ref = useRef<HTMLDivElement>(null)
@@ -133,6 +160,45 @@ export function MoveTree({
           {t('board:nav.lastSymbol')}
         </button>
       </div>
+
+      {branch !== null && branch.options.length >= 2 && (
+        <div
+          className="move-tree__branches"
+          data-testid="branch-picker"
+          role="group"
+          aria-label={t('board:tree.title')}
+        >
+          {branch.options.map((option) => {
+            const active = option.index === branch.activeIndex
+            const label =
+              option.index === 0
+                ? // Child 0 is the default (first-child) continuation — the
+                  // main line by SGF convention, even at an end-of-record
+                  // branch point where that continuation simply runs into the
+                  // first variation.
+                  t('board:tree.mainLine')
+                : (option.label ?? t('board:tree.variation', { n: option.index }))
+            return (
+              <button
+                key={option.index}
+                type="button"
+                className={
+                  active
+                    ? 'move-tree__branch move-tree__branch--active'
+                    : 'move-tree__branch'
+                }
+                data-testid={`branch-option-${String(option.index)}`}
+                aria-pressed={active}
+                onClick={() => {
+                  onChooseBranch?.(option.index)
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </nav>
   )
 }

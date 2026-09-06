@@ -164,6 +164,15 @@ const api = Object.freeze({
       invoke('settings:hasSecret', request),
   }),
 
+  engine: Object.freeze({
+    info: (request: ChannelRequest<'engine:info'>) => invoke('engine:info', request),
+    start: (request: ChannelRequest<'engine:start'>) => invoke('engine:start', request),
+    setGame: (request: ChannelRequest<'engine:setGame'>) =>
+      invoke('engine:setGame', request),
+    setCursor: (request: ChannelRequest<'engine:setCursor'>) =>
+      invoke('engine:setCursor', request),
+  }),
+
   onLlmDelta: (listener: (payload: EventPayload<'llm:delta'>) => void) =>
     subscribe('llm:delta', listener),
   onLlmDone: (listener: (payload: EventPayload<'llm:done'>) => void) =>
@@ -176,6 +185,8 @@ const api = Object.freeze({
     subscribe('menu:command', listener),
   onEngineStatus: (listener: (payload: EventPayload<'engine:status'>) => void) =>
     subscribe('engine:status', listener),
+  onEngineAnalysis: (listener: (payload: EventPayload<'engine:analysis'>) => void) =>
+    subscribe('engine:analysis', listener),
 })
 
 export type GoMentorApi = typeof api

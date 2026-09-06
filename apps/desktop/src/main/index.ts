@@ -5,11 +5,12 @@ import { createSettingsService } from './settings'
 import { createSecretsService, electronEncryptor } from './safe-storage'
 import { createGameStore } from './library/store'
 import { createLlmService } from './llm/service'
+import { createEngineService } from './katago/service'
+import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
-import { emit } from './ipc/events'
 
 /**
  * Main process entry: single-instance lock, lifecycle, IPC registration, window.
@@ -43,8 +44,9 @@ function createServices() {
   const secrets = createSecretsService(settings.secretStore, electronEncryptor)
   const store = createGameStore()
   const llm = createLlmService(settings, secrets)
+  const engine = createEngineService({ settings })
   const telemetry = createTelemetry()
-  return { settings, secrets, store, llm, telemetry }
+  return { settings, secrets, store, llm, engine, telemetry }
 }
 
 // Two instances would fight over settings, the log file, and — from M2 —
@@ -103,6 +105,7 @@ if (!gotLock) {
       settings: created.settings,
       secrets: created.secrets,
       llm: created.llm,
+      engine: created.engine,
       now: () => new Date().toISOString(),
       // A locale change rebuilds the whole menu rather than patching labels:
       // Electron replaces the menu wholesale, so there is no partial-update path
@@ -125,9 +128,11 @@ if (!gotLock) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(created.settings)
     })
 
-    // M1 has no engine. Emitted so the renderer's engine status UI has a real
-    // state to render rather than an indefinite "connecting".
-    emit('engine:status', { status: 'unavailable' })
+    // The engine reports its real state — `unavailable` until the first game
+    // open starts it (lazy start, `design.md` §Engine lifecycle) — replacing
+    // M1's hardcoded stand-in emission. A badge mounted later still syncs via
+    // `engine:info`; this line is for one already listening.
+    created.engine.notifyStatus()
   })
 }
 
@@ -149,5 +154,9 @@ app.on('before-quit', () => {
   // In-flight streams hold AbortControllers and an open HTTP connection. Left
   // running, the process would linger after the window closed.
   services?.llm.shutdown()
+  // A spawned engine that outlived the app would be an orphan holding CPU and
+  // the log tail; stop() is terminate → grace → SIGKILL, with a synchronous
+  // kill in the process layer's own 'exit' handler as the last resort.
+  void services?.engine.shutdown()
   removeAllHandlers(CHANNEL_NAMES)
 })

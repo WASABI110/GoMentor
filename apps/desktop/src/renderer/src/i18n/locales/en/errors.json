@@ -11,6 +11,7 @@
     "SGF_UNSUPPORTED_ENCODING": "This file cannot be saved in its original encoding. Save it as UTF-8 instead.",
     "BOARD_INVALID_COORD": "That coordinate is off the board.",
     "ENGINE_NOT_FOUND": "The KataGo engine could not be found.",
+    "ENGINE_BINARY_MISSING": "The KataGo engine is missing from this installation.",
     "ENGINE_START_TIMEOUT": "The engine took too long to start.",
     "ENGINE_CRASHED": "The engine exited unexpectedly.",
     "ENGINE_CIRCUIT_OPEN": "The engine has failed to start repeatedly, so retries are paused.",

@@ -190,7 +190,18 @@ test.describe('the board renders the correct position at each size', () => {
   let page: Page
 
   test.beforeEach(async () => {
-    app = await launchApp()
+    app = await launchApp({
+      env: {
+        // This spec is about canvas geometry, not the engine. Opening a record
+        // lazily starts the engine — which since the real fetch exists means
+        // every run of this spec would silently spawn real KataGo and burn
+        // CPU on positions it never asserts on. The override names a path
+        // that does not exist; in dev mode that degrades to `unavailable`
+        // (the expected-absence state), keeping the spec engine-free on any
+        // machine.
+        GOMENTOR_KATAGO_BINARY: join(REPO_ROOT, 'no-such-engine'),
+      },
+    })
     page = await firstPage(app)
   })
 

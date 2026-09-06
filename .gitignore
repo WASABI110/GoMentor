@@ -31,3 +31,6 @@ Thumbs.db
 # Playwright / test output
 test-results/
 playwright-report/
+
+# Planning-phase source snapshots (referenced by task research notes; local evidence, not repo content)
+.research-tmp/

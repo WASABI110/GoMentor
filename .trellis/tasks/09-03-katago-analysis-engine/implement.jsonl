@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Where main/katago/* lives and the workspace dependency rules — packages/core stays Electron-free, so engine protocol stays in core and lifecycle goes in main."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Typed ENGINE_* error codes, expected-absence-as-state (unavailable vs failed), and the IPC error envelope that engine channels must return."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Engine stderr capture, level calibration, log throttling, and what must never be logged. Required for process.ts and crash diagnostics."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Forbidden patterns and per-file testing requirements, including mutation coverage expectations for new pure logic (coalescer, sweep ledger, manifest verification)."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "zustand store rules for the new analysisStore: stores hold inputs, core derives; main-process state is mirrored not duplicated; getState() outside React for the canvas renderer."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Board overlay, WinrateGraph, and MoveTree branch-picker conventions; i18n namespace usage; Button/Input primitive reuse."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useIpcEvent subscription discipline — the two new engine events follow the shell-level subscription rule in useMainProcessEvents."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M2 wraps M1's pure protocol layer (gtp.ts/analysis.ts) rather than re-implementing; the fake engine must frame with the production parsers."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M2 touches shared schemas, main, preload, and renderer; a change to ipc.ts ripples through all three processes plus the A9 meta-test."}
+{"file": ".trellis/tasks/09-03-katago-analysis-engine/research/katago-releases.md", "reason": "Ground truth for the fetch manifest: exact asset names, per-platform Eigen availability, checksums. Values must come from here, not memory."}
+{"file": ".trellis/tasks/09-03-katago-analysis-engine/research/katago-networks.md", "reason": "Which net the core tier bundles and its checksum/license; feeds the manifest and NOTICE."}
+{"file": ".trellis/tasks/09-03-katago-analysis-engine/research/bundled-binary-packaging.md", "reason": "macOS quarantine / Windows SmartScreen / VC++ redist facts that shape locate.ts and the CI packaged-launch gate."}
+{"file": ".trellis/tasks/09-03-katago-analysis-engine/research/eigen-cpu-throughput.md", "reason": "Visits/s evidence grounding B3's latency number and the maxVisits/reportEvery parameters."}

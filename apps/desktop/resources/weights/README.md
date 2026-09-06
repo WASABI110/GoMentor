@@ -1,6 +1,6 @@
 # `resources/weights`
 
-Empty in M1. KataGo neural network files (`.bin.gz`) land here in M2, fetched by `pnpm fetch:weights`.
+Empty in M1. KataGo neural network files (the g170 finals ship as `.txt.gz`) land here in M2, fetched by `pnpm fetch:weights`.
 
 Copied outside the asar by `electron-builder.yml` through `extraResources`: KataGo opens the network file itself, and a path inside an archive is not a path it can open.
 

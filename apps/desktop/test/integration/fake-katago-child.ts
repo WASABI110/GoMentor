@@ -4,9 +4,11 @@
  * A real program, spawned as a real child, reading real stdin and writing real
  * stdout. `design.md` chose this over a mock deliberately: the things that break in
  * engine integration are pipes, response framing, and exit handling, and a mock
- * object exercises none of them — it tests the mock. GTP rather than analysis mode
- * for the same reason, inverted: GTP is trivial to fake honestly, so the fake stays
- * a transport exercise instead of becoming a second engine implementation.
+ * object exercises none of them — it tests the mock. It speaks GTP by default
+ * and the analysis protocol with `--mode=analysis` — GTP because it is trivial
+ * to fake honestly, analysis because that is what M2's process layer spawns —
+ * so the fake stays a transport exercise instead of becoming a second engine
+ * implementation.
  *
  * ## What this deliberately is not
  *
@@ -27,50 +29,130 @@
  * the paths that matter: `ENGINE_CRASHED`, `ENGINE_START_TIMEOUT`,
  * `ENGINE_QUERY_FAILED`. So the faults are first-class, selected by argv:
  *
- *   --crash-after=N     exit(3) after answering N commands
+ *   --crash-after=N     exit(3) after answering N commands (GTP) or emitting N
+ *                       response lines (analysis)
  *   --exit-code=N       what `quit` (and --crash-after) exits with; default 0 / 3
- *   --hang-on=CMD       read the command, answer nothing, ever
- *   --garbage-on=CMD    answer with a line that is not a GTP response at all
- *   --unterminated-on=CMD  answer without the blank line, so the block never closes
+ *   --hang-on=CMD       GTP: read the command, answer nothing, ever.
+ *                       Analysis: matches when the request id CONTAINS the value
+ *   --hang-on-query     analysis mode: hang on every analysis query
+ *   --garbage-on=CMD    GTP: answer with a line that is not a GTP response at all.
+ *                       Analysis: same, when the request id contains the value
+ *   --unterminated-on=CMD  (GTP only) answer without the blank line, so the block never closes
  *   --delay-ms=N        wait N ms before each response
  *   --stderr-noise      write to stderr on startup, as real engines do
+ *   --stderr-lines=N    write N extra stderr lines at startup (throttle testing)
  *   --no-startup-banner suppress the stderr banner
+ *   --mode=analysis     speak the analysis protocol instead of GTP (below)
+ *                       The positional `analysis` also selects analysis mode —
+ *                       the env-override path (`GOMENTOR_KATAGO_BINARY`) cannot
+ *                       carry flags, and the service always passes the
+ *                       subcommand, so the positional alone must be enough.
  *
- * `--unterminated-on` is the subtle one and the reason it exists: a reader that
- * treats the first newline as end-of-response passes every other test in this file
- * and fails only on a multi-line body. This fault makes the opposite mistake
- * detectable too — a reader that accepts an unterminated block will hand a partial
- * body to its caller.
+ * Two analysis-mode faults are env-selected for the same reason (the e2e
+ * launches the fake through `GOMENTOR_KATAGO_BINARY`, which names a file, not
+ * a command line):
+ *
+ *   FAKE_KATAGO_OWNERSHIP_SHORT   when set, queries whose id contains the
+ *                       value ('*' matches all) answer includeOwnership with
+ *                       an array one point short — B4's wrong-length rejection,
+ *                       which no argv can reach in the env-override path.
+ *   FAKE_KATAGO_DELAY_MS  when set to a positive integer, every analysis
+ *                       response waits that long before being written. The
+ *                       sweep e2e uses this to make a whole-record sweep fill
+ *                       the winrate graph *progressively* instead of
+ *                       instantly, so a spec can watch points appear; no argv
+ *                       flag can reach the env-override launch path.
+ *   FAKE_KATAGO_CRASH_ONCE_AFTER / FAKE_KATAGO_CRASH_MARKER  crash after N
+ *                       responses — but only on the spawn that found the
+ *                       marker absent, which is also the spawn that writes
+ *                       it. The crash-recovery e2e needs exactly one crash
+ *                       followed by a healthy respawn, and every respawn is
+ *                       the same binary with the same env; the marker file is
+ *                       how the fake tells its own launches apart.
+ *
+ * ## Analysis-mode terminate semantics (Stage 5)
+ *
+ * A query read but not yet answered is *pending*; answers drain through a
+ * serialised queue (one response per delay, in issue order — true
+ * concurrency would make the sweep e2e's "fills progressively" timing
+ * assumptions meaningless). A terminate for a pending query models KataGo's
+ * documented behaviour (Analysis_Engine.md, fetched 2026-09-05): the query
+ * still concludes with **exactly one final reply** carrying
+ * `isDuringSearch: false`, and nothing after. A terminate for an already
+ * answered query is ignored, and a query under `--hang-on`/`--hang-on-query`
+ * never becomes pending — a wedged engine processes nothing, which is what
+ * the watchdog exists to detect.
+ *
+ * ## Analysis mode (`--mode=analysis`)
+ *
+ * M2's process layer spawns `katago analysis -config <cfg> -model <net>`, so
+ * the fake accepts and ignores that argv shape (`analysis`, `-config`,
+ * `-model`, `-override-config`) and then speaks newline-delimited JSON on
+ * stdin/stdout instead of GTP: one request object per line, one response
+ * object per line, `{id, action: 'terminate'}` cancels a query. Responses are
+ * canned and **seeded by request content** — same request, same bytes, every
+ * run — because determinism is what makes a fake usable in an assertion.
+ *
+ * What the fake still deliberately is not: an engine. The canned response
+ * carries a rootInfo, two quarter-board candidates, and an ownership array
+ * sized from the request, but no search results. Its job is to give the
+ * production framing and parsing real bytes to chew on — `splitJsonLines` and
+ * `parseAnalysisResponse` decide what those bytes mean.
+ *
+ * `--unterminated-on` is GTP-only: analysis mode has no block terminator to
+ * withhold. Hanging and garbage have analysis-mode semantics (see above) and
+ * exist for the crash/hang recovery tests (B5/B6 groundwork).
  */
+import { existsSync, writeFileSync } from 'node:fs'
 import { GTP_COMMANDS, KATAGO_COMMANDS } from '@gomentor/core/katago/commands'
+import { splitJsonLines } from '@gomentor/core/katago/analysis'
+import { toGtp } from '@gomentor/core/board/coords'
+import type { BoardSize } from '@gomentor/shared'
 
 /** Parsed argv. Unknown flags are rejected rather than ignored. */
 interface Faults {
+  mode: 'gtp' | 'analysis'
   crashAfter: number | null
   exitCode: number | null
   hangOn: string | null
+  hangOnQuery: boolean
   garbageOn: string | null
   unterminatedOn: string | null
   delayMs: number
   stderrNoise: boolean
+  stderrLines: number
   startupBanner: boolean
 }
 
 function parseFaults(argv: readonly string[]): Faults {
   const faults: Faults = {
+    mode: argv.includes('--mode=analysis') ? 'analysis' : 'gtp',
     crashAfter: null,
     exitCode: null,
     hangOn: null,
+    hangOnQuery: false,
     garbageOn: null,
     unterminatedOn: null,
     delayMs: 0,
     stderrNoise: false,
+    stderrLines: 0,
     startupBanner: true,
   }
 
-  for (const arg of argv) {
+  // Indexed, not `for..of`: `-config`/`-model`/`-override-config` take their
+  // value as the *next* argv entry, and the loop must skip it — a path value
+  // would otherwise fall into the unknown-argument rejection below.
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index] ?? ''
     const [flag, rawValue] = arg.split('=', 2)
     switch (flag) {
+      case '--mode':
+        // Only `analysis` exists; an unknown mode is a typo, not a default.
+        if (rawValue !== 'analysis') {
+          process.stderr.write(`fake-katago: unknown mode ${arg}\n`)
+          process.exit(2)
+        }
+        break
       case '--crash-after':
         faults.crashAfter = toInt(rawValue, arg)
         break
@@ -79,6 +161,9 @@ function parseFaults(argv: readonly string[]): Faults {
         break
       case '--hang-on':
         faults.hangOn = requireValue(rawValue, arg)
+        break
+      case '--hang-on-query':
+        faults.hangOnQuery = true
         break
       case '--garbage-on':
         faults.garbageOn = requireValue(rawValue, arg)
@@ -92,8 +177,27 @@ function parseFaults(argv: readonly string[]): Faults {
       case '--stderr-noise':
         faults.stderrNoise = true
         break
+      case '--stderr-lines':
+        faults.stderrLines = toInt(rawValue, arg)
+        break
       case '--no-startup-banner':
         faults.startupBanner = false
+        break
+      case 'analysis':
+        // The real binary's subcommand, which the service always passes. The
+        // positional alone also selects analysis mode: the env-override path
+        // (`GOMENTOR_KATAGO_BINARY`) names a file and cannot carry
+        // `--mode=analysis`, so without this the service's faithful
+        // `analysis -config … -model …` argv would be rejected as unknown.
+        faults.mode = 'analysis'
+        break
+      case '-config':
+      case '-model':
+      case '-override-config':
+        // Real-katago CLI flags the service passes. The value is the next
+        // argv entry; skip it so a strict parser does not reject a faithful
+        // command line.
+        index += 1
         break
       default:
         // Rejected, not ignored. A typo'd fault flag would otherwise produce a
@@ -179,6 +283,11 @@ const GENMOVE_CYCLE = ['D4', 'Q16', 'D16', 'Q4', 'pass', 'K10', 'resign']
 
 async function main(): Promise<void> {
   const faults = parseFaults(process.argv.slice(2))
+  if (faults.mode === 'analysis') {
+    await runAnalysis(faults)
+    return
+  }
+
   const board: Board = { size: 19, komi: 7.5, moves: [] }
 
   let answered = 0
@@ -189,6 +298,7 @@ async function main(): Promise<void> {
     // will try to parse this as a response and fail.
     process.stderr.write('fake-katago: OpenCL device 0 initialised (not really)\n')
   }
+  writeStderrBurst(faults)
   if (faults.startupBanner) {
     process.stderr.write('fake-katago ready\n')
   }
@@ -371,6 +481,17 @@ function exitWith(faults: Faults, fallback: number): never {
   process.exit(faults.exitCode ?? fallback)
 }
 
+/**
+ * `--stderr-lines=N`: the flood the throttle exists for. Real engines produce
+ * this volume during tuning/startup; a fake that only ever wrote one line
+ * could not distinguish "throttled" from "nothing to throttle".
+ */
+function writeStderrBurst(faults: Faults): void {
+  for (let index = 0; index < faults.stderrLines; index += 1) {
+    process.stderr.write(`fake-katago: noise line ${String(index)}\n`)
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
@@ -378,7 +499,303 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Yields complete lines from a stream.
+ * Deterministic non-cryptographic hash, so the canned response is seeded by
+ * request content without `Math.random` — the same request must produce the
+ * same bytes on every run, or assertions against it are assertions against
+ * chance.
+ */
+function hashString(text: string): number {
+  let hash = 0
+  for (const ch of text) {
+    hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  }
+  return hash
+}
+
+function intOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) ? value : fallback
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10_000) / 10_000
+}
+
+/**
+ * The canned analysis response. Enough shape for the production parser to
+ * exercise every field: a rootInfo (so `winrate`/`scoreLead` come from the
+ * root, not a candidate), two candidates on quarter-board points (always
+ * legal for the board size, unlike fixed vertices would be on a 9×9), an
+ * ownership array sized from the request when asked for one, and no
+ * `isDuringSearch` (so the parser reports a complete result).
+ */
+function cannedAnalysisResponse(
+  request: Record<string, unknown>,
+  id: string,
+): Record<string, unknown> {
+  const sizeX = intOr(request['boardXSize'], 19)
+  const sizeY = intOr(request['boardYSize'], 19)
+  const maxVisits = Math.max(1, intOr(request['maxVisits'], 100))
+  const seed = hashString(`${id}:${JSON.stringify(request['moves'] ?? null)}`)
+
+  // Candidate points scale with the board so they are always on it. The
+  // coords module is the authority on vertex spelling (the GTP `I`-skip
+  // among other things) — the fake borrows it rather than re-deriving.
+  const boardSize: BoardSize = sizeX === 9 || sizeX === 13 || sizeX === 19 ? sizeX : 19
+  const quarter = Math.floor(boardSize / 4)
+  const first = toGtp({ x: quarter, y: quarter }, boardSize)
+  const second = toGtp(
+    { x: boardSize - 1 - quarter, y: boardSize - 1 - quarter },
+    boardSize,
+  )
+
+  const winrate = (500 + (seed % 100)) / 1000 // 0.500..0.599
+  const scoreLead = (seed % 21) / 2 - 5 // -5.0..5.0 in 0.5 steps
+
+  const response: Record<string, unknown> = {
+    id,
+    rootInfo: {
+      visits: maxVisits,
+      winrate: round4(winrate),
+      scoreLead: round4(scoreLead),
+    },
+    moveInfos: [
+      {
+        move: first,
+        visits: Math.max(1, Math.floor((maxVisits * 2) / 3)),
+        winrate: round4(Math.min(1, winrate + 0.01)),
+        scoreLead: round4(scoreLead + 0.5),
+        order: 0,
+        pv: [first, second],
+      },
+      {
+        move: second,
+        visits: Math.max(1, Math.floor(maxVisits / 3)),
+        winrate: round4(Math.max(0, winrate - 0.02)),
+        scoreLead: round4(scoreLead - 0.5),
+        order: 1,
+        pv: [second, first],
+      },
+    ],
+  }
+  if (request['includeOwnership'] === true) {
+    // Sized from the request, not the fallback board: ownership length is a
+    // protocol property (`parseOwnership` rejects a wrong-length array), so a
+    // fake that "corrected" it to 19² would hide B4's entire failure class.
+    const length = Math.max(0, sizeX) * Math.max(0, sizeY)
+    // `FAKE_KATAGO_OWNERSHIP_SHORT` (env, because the env-override launch path
+    // cannot pass argv): queries whose id contains the value — or all queries
+    // for '*' — answer one point short, driving the wrong-length rejection
+    // through the real parse path end-to-end.
+    const shortOn = process.env['FAKE_KATAGO_OWNERSHIP_SHORT']
+    const shorted =
+      shortOn !== undefined &&
+      shortOn !== '' &&
+      (shortOn === '*' || id.includes(shortOn))
+    response['ownership'] = Array.from(
+      { length: shorted ? Math.max(1, length - 1) : length },
+      (_, index) => ((index % 7) - 3) / 12,
+    )
+  }
+  return response
+}
+
+/**
+ * Analysis mode: newline-delimited JSON on stdin/stdout, the protocol
+ * `packages/core/src/katago/analysis.ts` encodes. One response line per
+ * request. Terminate semantics, answer queueing, and the crash-once env pair
+ * are documented in the file header (§Analysis-mode terminate semantics).
+ *
+ * stdin is framed with the production `splitJsonLines`, never a local copy
+ * (implement.md Stage 2): the fake's job is to give the real framing and
+ * parsing code real bytes to chew on, and a private splitter here could
+ * silently diverge from the reader it feeds.
+ */
+async function runAnalysis(faults: Faults): Promise<void> {
+  /**
+   * Query ids already given their mandated terminate final reply. There is
+   * deliberately NO "answered" set: sweep query ids are reused across
+   * records by contract (`sweep:<move>`), so a client legitimately re-sends
+   * an id this process has answered before — for a different game — and a
+   * real engine answers a duplicate id like any other request.
+   */
+  const terminated = new Set<string>()
+  /**
+   * Queries read but not yet answered. A terminate for one of these produces
+   * exactly one final reply (`isDuringSearch: false`) — KataGo's documented
+   * behaviour — and cancels the queued answer.
+   */
+  const pending = new Map<
+    string,
+    { readonly request: Record<string, unknown>; cancel: () => void }
+  >()
+  let responses = 0
+  /** Latched when the crash threshold is reached: stop answering, drain, exit. */
+  let crashing = false
+  /** Serialised answer queue — see the header for why it is not concurrent. */
+  let answerChain: Promise<void> = Promise.resolve()
+
+  if (faults.stderrNoise) {
+    // Real engines chatter on stderr. A reader that merged stderr into stdout
+    // will try to parse this as a response and fail.
+    process.stderr.write('fake-katago: Eigen backend initialised (not really)\n')
+  }
+  writeStderrBurst(faults)
+  if (faults.startupBanner) {
+    // Deliberately carries no version number: the service's version scan is
+    // best-effort, and the fake is how "banner without a version" is tested.
+    process.stderr.write('fake-katago ready (analysis)\n')
+  }
+
+  // Env-selected delay (see the header): the sweep e2e needs the fake to take
+  // measurable time per response so the graph visibly fills. argv
+  // `--delay-ms` says the same thing for the integration launches.
+  const envDelay = Number(process.env['FAKE_KATAGO_DELAY_MS'] ?? 0)
+  const delayMs = Number.isInteger(envDelay) && envDelay > 0 ? envDelay : faults.delayMs
+
+  // The one-shot crash pair (header): argv cannot reach the env-override
+  // launch path, and the service respawns the same binary with the same env —
+  // the marker file is the only thing that distinguishes spawn 1 from spawn 2.
+  let crashAfter = faults.crashAfter
+  const marker = process.env['FAKE_KATAGO_CRASH_MARKER']
+  const onceAfter = readEnvCount('FAKE_KATAGO_CRASH_ONCE_AFTER')
+  if (
+    crashAfter === null &&
+    onceAfter !== null &&
+    marker !== undefined &&
+    marker !== ''
+  ) {
+    if (existsSync(marker)) {
+      // A previous spawn already took the crash; this one is the healthy
+      // respawn the recovery tests want.
+    } else {
+      writeFileSync(marker, 'crashed\n', 'utf8')
+      crashAfter = onceAfter
+    }
+  }
+
+  function writeLine(text: string): void {
+    process.stdout.write(`${text}\n`)
+    responses += 1
+    if (crashAfter !== null && responses >= crashAfter && !crashing) {
+      crashing = true
+      // Drain margin, measured the hard way in Stage 5 crash-recovery work:
+      // `process.exit` in the same tick as a pipe write can truncate the
+      // write on Windows, and then the "crash mid-analysis" test fails for a
+      // framing reason instead of exercising recovery. No further answers are
+      // scheduled once `crashing` latches, so exactly `crashAfter` responses
+      // reach the parent, deterministically.
+      setTimeout(() => exitWith(faults, 3), 25)
+    }
+  }
+
+  function queueAnswer(record: Record<string, unknown>, id: string): void {
+    let cancelled = false
+    pending.set(id, {
+      request: record,
+      cancel: () => {
+        cancelled = true
+      },
+    })
+    answerChain = answerChain.then(
+      () =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            pending.delete(id)
+            if (cancelled || crashing) {
+              resolve()
+              return
+            }
+            writeLine(JSON.stringify(cannedAnalysisResponse(record, id)))
+            resolve()
+          }, delayMs)
+        }),
+    )
+  }
+
+  function handleLine(line: string): void {
+    const trimmed = line.trim()
+    if (trimmed === '' || crashing) return
+
+    let request: unknown
+    try {
+      request = JSON.parse(trimmed)
+    } catch {
+      writeLine('{"id":"","error":"could not parse request"}')
+      return
+    }
+    if (typeof request !== 'object' || request === null) {
+      writeLine('{"id":"","error":"request is not an object"}')
+      return
+    }
+    const record = request as Record<string, unknown>
+    const id = typeof record['id'] === 'string' ? record['id'] : ''
+
+    if (record['action'] === 'terminate') {
+      const entry = pending.get(id)
+      if (entry === undefined) return
+      // KataGo's documented terminate behaviour: the query still concludes
+      // with exactly one final reply, marked not-during-search. The answer it
+      // would have given is cancelled — the reply stands in for it.
+      entry.cancel()
+      pending.delete(id)
+      terminated.add(id)
+      writeLine(
+        JSON.stringify({
+          ...cannedAnalysisResponse(entry.request, id),
+          isDuringSearch: false,
+        }),
+      )
+      return
+    }
+    if (terminated.has(id)) return
+    if (faults.hangOnQuery) return
+    if (faults.hangOn !== null && id.includes(faults.hangOn)) return
+
+    if (faults.garbageOn !== null && id.includes(faults.garbageOn)) {
+      // Names the id so the reader can attribute the garbage to its query —
+      // an unparseable line that answers nothing in particular is ignorable
+      // chatter; one that answers *this* query is a protocol failure.
+      writeLine(`this is not a JSON analysis response for id ${id}`)
+      return
+    }
+
+    queueAnswer(record, id)
+  }
+
+  let stdinBuffer = ''
+  // `process.stdin` yields `any` chunks by default; the AsyncIterable cast is
+  // what keeps `chunk` typed through the loop (the GTP path gets the same
+  // treatment via readLines' parameter type).
+  for await (const chunk of process.stdin as AsyncIterable<Buffer | string>) {
+    stdinBuffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+    const framed = splitJsonLines(stdinBuffer)
+    stdinBuffer = framed.remainder
+    for (const line of framed.lines) handleLine(line)
+  }
+  // A final unterminated line is still a request worth answering: the real
+  // engine treats EOF's buffered bytes the same way. Any queued answers die
+  // with the process — stdin EOF is the shutdown signal, not a flush request.
+  if (stdinBuffer.trim() !== '') handleLine(stdinBuffer)
+
+  // Stdin closed without an explicit quit — the analysis engine's normal
+  // shutdown signal.
+  exitWith(faults, 0)
+}
+
+/** A positive integer read from the environment, or null when absent/invalid. */
+function readEnvCount(name: string): number | null {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return null
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/**
+ * Yields complete lines from a stream. GTP mode only: analysis mode frames its
+ * stdin with the production `splitJsonLines` (see `runAnalysis`), and this
+ * hand-rolled splitter stays solely because M1's GTP transport — whose
+ * framing is a blank-line block terminator, not newline-delimited JSON — is
+ * gate-verified territory a Stage-2 change must not touch.
  *
  * Hand-rolled rather than `node:readline` because the buffering behaviour is the
  * thing under test on the other side of the pipe, and a chunk boundary landing

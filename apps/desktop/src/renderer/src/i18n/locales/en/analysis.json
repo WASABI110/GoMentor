@@ -36,5 +36,10 @@
     "gain": "{{points}} points ahead",
     "even": "As good as the suggested move"
   },
-  "empty": "No analysis yet"
+  "empty": "No analysis yet",
+  "graph": {
+    "label": "Win rate graph",
+    "pending": "Analysis in progress — the hatched region is not analysed yet",
+    "complete": "Whole game analysed"
+  }
 }

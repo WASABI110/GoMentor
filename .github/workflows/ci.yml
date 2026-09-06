@@ -88,6 +88,29 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      # The KataGo engine + net are downloaded executables, not npm packages, so
+      # the lockfile cannot pin them; scripts/katago-manifest.ts pins version,
+      # per-platform asset, and (TOFU) sha256 instead. We cache the fetched
+      # payload keyed by the manifest's git blob hash — content-addressed, so
+      # bumping the manifest (new version/net) invalidates the cache, while an
+      # unrelated commit reuses it. Without the cache each of the three matrix
+      # runs would re-download ~50MB (engine zip + net).
+      - name: Restore KataGo engine + weights
+        id: katago-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/resources
+          key: katago-${{ runner.os }}-${{ hashFiles('scripts/katago-manifest.ts') }}
+
+      # macOS has no official KataGo build (scope decision 6), so the fetch is a
+      # no-op there and the app reports `unavailable` by construction. The fetch
+      # fails loudly on win/linux if the source is unreachable — a zero exit must
+      # mean "present and verified", never "silently skipped".
+      - name: Fetch KataGo engine + weights
+        run: |
+          pnpm fetch:katago
+          pnpm fetch:weights
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -117,6 +140,21 @@ jobs:
       # step exists for: does packaging succeed on this OS.
       - name: Package (unsigned)
         run: pnpm package
+
+      # The packaged-launch gate (B1): the `win-unpacked` / `linux-unpacked`
+      # app must reach `ready` against the real bundled KataGo and land a real
+      # analysis readout — the assertion that only a packaged build can make,
+      # because it exercises the `extraResources` layout `locate.ts` resolves
+      # in packaged mode. Skips itself on macOS (no engine asset, no
+      # `<platform>-unpacked` dir) and whenever no package exists, so it is
+      # safe to run unconditionally after packaging.
+      - name: Packaged launch gate (Linux, headless display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm --filter @gomentor/desktop exec playwright test packaged-launch
+
+      - name: Packaged launch gate
+        if: runner.os == 'Windows'
+        run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch
 
       # R2's hard boundary, and it must be the last `run` step, after packaging.
       # It asserts that nothing above — install, typecheck, test, build, e2e,

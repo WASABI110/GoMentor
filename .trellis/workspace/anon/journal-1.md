@@ -28,3 +28,17 @@ Completed Stage 6 renderer components for the GoMentor desktop app: GameList wit
 ### Status
 
 [OK] **Completed**
+
+## Session 2: M2 final gate — real-engine benchmark, net swap, packaged launch, B1–B9 recorded
+
+**Date**: 2026-09-06
+**Task**: KataGo Analysis Engine (M2) — final gate
+**Branch**: `master`
+
+### Summary
+
+Closed out M2's final gate. Updated `docs/architecture.md` to M2 reality (last Stage 5 doc item), then ran the full-scope trellis-check — it caught a high-severity packaging bug (electron-builder `copyDir` places the *contents* of `from` into `to`, so `to: katago` would have shipped the engine flat and killed the packaged launch with `ENGINE_BINARY_MISSING`; fixed to per-platform `to:` with a regression test) plus a schema tightening (`errorCode` → `errorCodeSchema.optional()`, typed service failure codes). The Sep-4 network block had lifted, so the real engine fetched for the first time — and instantly failed to start: KataGo v1.18.1 requires `numAnalysisThreads`, which the config builder never emitted (the fake accepted any config; every test was green against an engine that could not run). Fixed with the `analysisThreadSplit` budget split (mutations M38/M93), then benchmarked both nets on the reference machine: b10c128 8.1s per 500-visit read (rejected), b6c96 3.4s (148 v/s) — the pre-agreed contingency fired and the bundled net swapped, with `fetch-weights.ts` now pruning non-primary nets from the shipped dir. Built the packaged-launch gate (`packaged-launch.spec.ts`): win/linux assert `ready` + a real ≥450-visit readout against the bundled engine; darwin asserts `unavailable`-by-construction with the record still open; wired into CI after `pnpm package`. Packaging itself needed `electronDist` pointed at the local dist (electron-builder's own download truncated) and the harness's `ELECTRON_RUN_AS_NODE` strip exported. gomentor-verify verdicts: B1–B8 PASS (notes recorded), B9 initially FAIL (no recorded verdicts) — closed by `final-gate.md`, ticked `implement.md`, and this journal. 1321 unit/integration + 36 e2e green, 95/95 mutations.
+
+### Status
+
+[OK] **Completed** (linux/darwin B1 halves + CI green validate on next push)

@@ -151,9 +151,44 @@ function fakeLlm() {
   }
 }
 
+/**
+ * In-memory engine service. The lifecycle itself is covered by
+ * `engine-service.test.ts` against the real fake child; here it only needs to
+ * prove the channels route to the service and return what it says. `setGame`
+ * and `setCursor` return canned query ids so the routing assertion can tell
+ * "the handler returned the service's answer" apart from "the handler made up
+ * an answer".
+ */
+function fakeEngine() {
+  const calls: { starts: number; games: unknown[]; cursors: number[] } = {
+    starts: 0,
+    games: [],
+    cursors: [],
+  }
+  return {
+    calls,
+    info: () => ({ status: 'unavailable' as const }),
+    start: () => {
+      calls.starts += 1
+      return Promise.resolve({ status: 'ready' as const, backend: 'eigen' as const })
+    },
+    setGame: (game: unknown) => {
+      calls.games.push(game)
+      return { focusQueryId: game === null ? null : 'focus:1' }
+    },
+    setCursor: (moveNumber: number) => {
+      calls.cursors.push(moveNumber)
+      return { focusQueryId: 'focus:2' }
+    },
+    notifyStatus: () => undefined,
+    shutdown: () => Promise.resolve(),
+  }
+}
+
 let store: ReturnType<typeof createGameStore>
 let secrets: ReturnType<typeof fakeSecrets>
 let llm: ReturnType<typeof fakeLlm>
+let engine: ReturnType<typeof fakeEngine>
 
 /**
  * Locales the fake `relabelMenu` was called with, most recent last.
@@ -174,11 +209,13 @@ beforeEach(() => {
   store = createGameStore()
   secrets = fakeSecrets()
   llm = fakeLlm()
+  engine = fakeEngine()
   registerAllHandlers({
     store,
     settings: createSettingsService(memoryFs(), '/virtual/settings.json'),
     secrets,
     llm,
+    engine,
     now: () => NOW,
     relabelMenu: (locale) => relabelCalls.push(locale),
   })
@@ -246,6 +283,7 @@ describe('registration covers the contract', () => {
         settings: createSettingsService(memoryFs(), '/virtual/settings.json'),
         secrets,
         llm,
+        engine,
         now: () => NOW,
         relabelMenu: (locale) => relabelCalls.push(locale),
       })
@@ -314,6 +352,7 @@ describe('the boundary rejects bad requests', () => {
       settings: createSettingsService(memoryFs(), '/virtual/settings.json'),
       secrets: exploding,
       llm,
+      engine,
       now: () => NOW,
       relabelMenu: (locale) => relabelCalls.push(locale),
     })
@@ -387,6 +426,62 @@ describe('sgf channels', () => {
       '/a.sgf',
       '/b.sgf',
     ])
+  })
+
+  // Asymmetric variations on purpose: child 0 continues two more moves (the
+  // first-child mainline = 5 moves), child 1 is a single move (3 moves total).
+  // The asymmetry is what makes a store overwrite observable in the library.
+  const VAR_SGF = '(;GM[1]SZ[9];B[fd];W[ff](;B[ee];W[ef];B[de])(;B[df]))'
+
+  it('parses a variation line when variationPath is given', async () => {
+    const mainline = await invoke('sgf:parse', { content: VAR_SGF })
+    if (!mainline.ok) throw new Error('unreachable')
+    expect((mainline.data as { moves: unknown[] }).moves).toHaveLength(5)
+
+    const variation = await invoke('sgf:parse', {
+      content: VAR_SGF,
+      variationPath: [1],
+    })
+    expect(variation.ok).toBe(true)
+    if (!variation.ok) throw new Error('unreachable')
+    const game = variation.data as {
+      moves: { player: string; coord: { x: number; y: number } }[]
+      branches: unknown[]
+    }
+    expect(game.moves).toHaveLength(3)
+    // Move 3 is the variation's first move, B[df] — proof the path was followed.
+    expect(game.moves[2]).toMatchObject({ player: 'black', coord: { x: 3, y: 5 } })
+  })
+
+  it('a branch re-parse does not rewrite the stored game', async () => {
+    // The read-only branch view shares the store row with the imported game
+    // (same content hash). The library row must keep the FIRST projection's
+    // move count — the list showing 3 for a game the user imported as 5 is
+    // the drift this guards — while the AST (and so sgf:serialize) keeps the
+    // whole tree.
+    const first = await invoke('sgf:parse', { content: VAR_SGF })
+    if (!first.ok) throw new Error('unreachable')
+    const id = (first.data as { id: string }).id
+
+    const branch = await invoke('sgf:parse', { content: VAR_SGF, variationPath: [1] })
+    if (!branch.ok) throw new Error('unreachable')
+    expect((branch.data as { moves: unknown[] }).moves).toHaveLength(3)
+
+    const list = await invoke('library:list', {})
+    if (!list.ok) throw new Error('unreachable')
+    const games = (list.data as { games: { id: string; moveCount: number }[] }).games
+    expect(games.find((game) => game.id === id)?.moveCount).toBe(5)
+
+    const serialized = await invoke('sgf:serialize', { gameId: id })
+    if (!serialized.ok) throw new Error('unreachable')
+    expect((serialized.data as { content: string }).content).toContain('B[df]')
+  })
+
+  it('rejects an out-of-range variationPath as IPC_INVALID_REQUEST', async () => {
+    const result = await invoke('sgf:parse', { content: VAR_SGF, variationPath: [5] })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.error.code).toBe('IPC_INVALID_REQUEST')
   })
 })
 
@@ -568,6 +663,54 @@ describe('llm channels', () => {
   })
 })
 
+describe('engine channels', () => {
+  it('engine:info returns the service snapshot', async () => {
+    const result = await invoke('engine:info', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ status: 'unavailable' })
+    // The handler asks, not tells: no start was requested by a snapshot read.
+    expect(engine.calls.starts).toBe(0)
+  })
+
+  it('engine:start delegates to the service', async () => {
+    const result = await invoke('engine:start', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ status: 'ready', backend: 'eigen' })
+    expect(engine.calls.starts).toBe(1)
+  })
+
+  it('engine:setGame routes the record and returns the named query id', async () => {
+    const game = {
+      gameId: 'g1',
+      boardSize: 19,
+      komi: 6.5,
+      rules: 'japanese',
+      setup: { black: [], white: [] },
+      moves: [{ player: 'black', coord: { x: 3, y: 3 } }],
+    }
+    const result = await invoke('engine:setGame', { game, atMove: 1 })
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ focusQueryId: 'focus:1' })
+    expect(engine.calls.games).toEqual([game])
+  })
+
+  it('engine:setGame passes a null record through as clearing', async () => {
+    const result = await invoke('engine:setGame', { game: null, atMove: 0 })
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ focusQueryId: null })
+    expect(engine.calls.games).toEqual([null])
+  })
+
+  it('engine:setCursor routes the cursor and returns the named query id', async () => {
+    const result = await invoke('engine:setCursor', { moveNumber: 42 })
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ focusQueryId: 'focus:2' })
+    expect(engine.calls.cursors).toEqual([42])
+  })
+})
+
 describe('every channel is exercised', () => {
   it('leaves no channel untested', () => {
     // A9's spirit applied here: a coverage claim that is not itself checked
@@ -585,6 +728,10 @@ describe('every channel is exercised', () => {
       'settings:hasSecret',
       'llm:sendMessage',
       'llm:cancel',
+      'engine:info',
+      'engine:start',
+      'engine:setGame',
+      'engine:setCursor',
     ]
     expect([...exercised].sort()).toEqual([...CHANNEL_NAMES].sort())
   })

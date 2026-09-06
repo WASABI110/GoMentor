@@ -4,7 +4,9 @@ import { registerSgfHandlers } from './sgf.handlers'
 import { registerLibraryHandlers } from './library.handlers'
 import { registerSettingsHandlers } from './settings.handlers'
 import { registerLlmHandlers } from './llm.handlers'
+import { registerEngineHandlers } from './engine.handlers'
 import type { Locale } from '@gomentor/shared'
+import type { EngineService } from '../katago/service'
 import type { GameStore } from '../library/store'
 import type { LlmService } from '../llm/service'
 import type { SecretsService } from '../safe-storage'
@@ -25,6 +27,8 @@ export interface Dependencies {
   settings: SettingsService
   secrets: SecretsService
   llm: LlmService
+  /** The engine lifecycle. Lazy: constructed here, started on first game open. */
+  engine: EngineService
   /**
    * Injected rather than called directly so handler tests are deterministic —
    * `importedAt` otherwise makes every expected value a moving target.
@@ -51,6 +55,7 @@ export function registerAllHandlers(deps: Dependencies): void {
   registerLibraryHandlers(deps.store, deps.now)
   registerSettingsHandlers(deps.settings, deps.secrets, deps.relabelMenu)
   registerLlmHandlers(deps.llm)
+  registerEngineHandlers(deps.engine)
 }
 
 export { removeAllHandlers }

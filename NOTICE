@@ -35,7 +35,33 @@ An empty ledger with derived code in the tree is a license defect.
 
 | Material | Upstream | Upstream license | Status | Notes |
 | --- | --- | --- | --- | --- |
-| _(none yet)_ | — | — | — | M1 introduces no derived material |
+| KataGo engine binaries (v1.18.1) | [lightvector/KataGo](https://github.com/lightvector/KataGo) | MIT | **Bundled** | Eigen CPU builds for win32-x64 and linux-x64 only; no macOS binaries are published. Pinned in `scripts/katago-manifest.ts`; MIT permits redistribution with the copyright/permission notice retained (upstream LICENSE) |
+
+### Bundled third-party binaries (M2)
+
+The KataGo engine and neural-net weights are downloaded at build time into
+`apps/desktop/resources/` and shipped inside the installer (ADR 0003, D6). They
+are not npm packages, so the license gate (`check:licenses`) does not see them;
+this ledger is the D4 provenance record for that payload.
+
+**KataGo engine** — [lightvector/KataGo](https://github.com/lightvector/KataGo),
+release [v1.18.1](https://github.com/lightvector/KataGo/releases/tag/v1.18.1),
+**MIT license** ("Copyright 2025 David J Wu … and/or other authors"). KataGo
+vendors third-party components under their own licenses inside `cpp/external`
+(clblast, cutlass, nlohmann_json, httplib, onnx, tclap, and others — see the
+upstream LICENSE preamble); those ride along inside the binary unchanged.
+
+**KataGo neural-net weights** — [katagotraining.org](https://katagotraining.org/)
+distributed-training nets, **CC0-1.0** for the g170 imported nets (the bundled
+b6c96 and the b10c128 alternative are g170 finals; the kata1-run nets carry a
+separate MIT-style license but are not what M2 bundles). CC0 waives attribution;
+provenance is recorded here regardless. The exact net
+(`kata1-b6c96-s175395328-d26788732.txt.gz`) is pinned in
+`scripts/katago-manifest.ts`.
+
+Neither payload publishes an upstream checksum, so the fetch scripts record a
+GoMentor-side sha256 at first download (trust-on-first-use) and verify against
+it thereafter; see `scripts/katago-manifest.ts`.
 
 ### Planned third-party components
 
@@ -43,8 +69,6 @@ Not yet vendored. Listed so the obligations are visible before the code lands.
 
 | Component | Upstream | License | Obligation when bundled |
 | --- | --- | --- | --- |
-| KataGo engine binaries | [lightvector/KataGo](https://github.com/lightvector/KataGo) | MIT | Ship the MIT text alongside the binaries; record the exact release tag |
-| KataGo neural-net weights | KataGo distributed training | See upstream terms | Record provenance and terms per weight file; do not assume MIT covers them |
 | `@sabaki/sgf` | [SabakiHQ/sgf](https://github.com/SabakiHQ/sgf) | MIT | Standard npm attribution |
 | `readboard` protocol (M5) | `qiyi71w/readboard` via lizzieyzy-next | GPL-3.0 | **If** the protocol is reverse-engineered from a GPL binary, the result is derived — record it here and keep GoMentor GPL |
 

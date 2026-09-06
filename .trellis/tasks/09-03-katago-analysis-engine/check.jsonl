@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review standards the check agent enforces: forbidden patterns, testing requirements, mutation expectations."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify ENGINE_* codes are used per convention and the error envelope survives the IPC boundary."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify engine stderr handling follows level/redaction rules."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify analysisStore follows the store-split and no-duplication rules."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify overlay/graph components and i18n namespace usage match conventions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check schema changes ripple consistently through shared/main/preload/renderer."}
+{"file": ".trellis/tasks/09-03-katago-analysis-engine/research/katago-releases.md", "reason": "Cross-check the fetch manifest against verified release facts."}

@@ -16,6 +16,15 @@ copyright: Copyright (C) 2026 GoMentor contributors
 # The exact version is required: a range reproduces the failure above.
 electronVersion: 33.4.11
 
+# Copy the locally installed Electron distribution instead of downloading one.
+# With only `electronVersion`, electron-builder fetched a dist zip of its own;
+# on this network that download was truncated and packaging died at its
+# rename step (`ENOENT ... electron.exe -> GoMentor.exe`) with 11 of the 19
+# dist files missing from `win-unpacked` — a source that was never complete.
+# `node-linker=hoisted` puts the installed dist at the repository root, hence
+# the `../../`. CI benefits identically: no second Electron download.
+electronDist: ../../node_modules/electron/dist
+
 directories:
   output: dist
   buildResources: build
@@ -25,20 +34,30 @@ files:
   - package.json
   - '!**/*.map'
 
-# KataGo binaries and weights ship OUTSIDE the asar so the engine can be
-# spawned as a child process and so blockmap diffing stays effective at
-# ~120MB+ (D6, tiered installer). Empty in M1 — the structure exists now so
-# M2 is purely additive.
+# Resources ship OUTSIDE the asar so the engine can be spawned as a child
+# process and so blockmap diffing stays effective (D6, tiered installer).
+#
+# Platform split (M2): knowledge and weights are platform-independent, so they
+# stay in this top-level block and ride into every installer. The KataGo engine
+# binary is per-platform, so it moved into `win.extraResources` / `linux.extraResources`
+# below — each installer ships only its own OS/arch binary (the tier is sized for
+# one). There is deliberately no engine entry under `mac`: KataGo publishes no
+# macOS binaries (research katago-releases.md), so the macOS app reports
+# `unavailable` by construction (scope decision 6). The M1 top-level
+# `resources/katago` copy-everything entry is gone; copying all platforms into
+# every installer would triple the tier silently.
 extraResources:
   - from: resources/knowledge
     to: knowledge
     filter: ['**/*']
-  - from: resources/katago
-    to: katago
-    filter: ['**/*']
   - from: resources/weights
     to: weights
-    filter: ['**/*']
+    # An interrupted fetch can leave a *.partial next to the verified net; the
+    # partial is resume state, not payload, and must not ship. The `!**/` form
+    # also catches one in a nested subdir — minimatch's `!*.partial` does not
+    # cross `/`, so a nested partial would otherwise ride through (measured with
+    # the production FileMatcher over a stub payload tree).
+    filter: ['**/*', '!*.partial', '!**/*.partial']
 
 asar: true
 
@@ -47,6 +66,32 @@ win:
     - target: nsis
       arch: [x64]
   artifactName: ${productName}-${version}-win-${arch}.${ext}
+  # The Eigen CPU engine for this platform, spawned as a child process from
+  # outside the asar. `from` is the per-platform subdirectory the fetch script
+  # populates (katago-manifest.ts / fetch-katago.ts).
+  #
+  # `to: katago/win32-x64` is load-bearing and must match `paths.ts`'
+  # `engineBinariesDir('<platform>-<arch>')`, which `locate.ts` resolves in
+  # PACKAGED builds too: electron-builder's copyDir places the CONTENTS of
+  # `from` into `to` (measured against app-builder-lib's copyFiles/copyDir),
+  # so `to: katago` would flatten the payload to `resourcesPath/katago/
+  # katago.exe` and a packaged launch would die with ENGINE_BINARY_MISSING —
+  # the exact failure the dev-mode layout would never show. The per-platform
+  # subdir in the destination is what lets both contexts share one resolver.
+  #
+  # The fetcher keeps the verified-download archive (*.zip) and any interrupted
+  # *.partial in this directory as the local resume cache. They must NOT ship:
+  # the archive alone roughly doubles the engine tier inside the installer. The
+  # fetcher flattens everything today so there are no nested dirs, but `!**/` is
+  # kept anyway: if a nested archive ever appeared, the shallow `!*.zip` would
+  # let it through (minimatch does not cross `/`), and the tier would grow
+  # silently. The `!.*` dotfile exclusion is shallow-only and stays shallow —
+  # dotfiles here are top-level fetch intermediates, and a nested `.gitkeep` is
+  # exactly the placeholder electron-builder ignores by default.
+  extraResources:
+    - from: resources/katago/win32-x64
+      to: katago/win32-x64
+      filter: ['**/*', '!*.zip', '!**/*.zip', '!*.partial', '!**/*.partial', '!.*']
 
 nsis:
   oneClick: false
@@ -70,6 +115,14 @@ linux:
     - target: AppImage
       arch: [x64]
   category: Education
+  # The Eigen CPU engine for this platform (an AppImage extracted at fetch time
+  # to a real ELF — see fetch-katago.ts). No engine ships on macOS. Same cache
+  # exclusions and same `to: katago/<platform>-<arch>` rule as the win block —
+  # the destination must keep the per-platform subdir `paths.ts` resolves.
+  extraResources:
+    - from: resources/katago/linux-x64
+      to: katago/linux-x64
+      filter: ['**/*', '!*.zip', '!**/*.zip', '!*.partial', '!**/*.partial', '!.*']
 
 # Update-feed metadata for electron-updater, and the publish target for the
 # future release pipeline. CI builds must pass `--publish never` (the `package`

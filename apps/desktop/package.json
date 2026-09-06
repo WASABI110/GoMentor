@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.renderer-test.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
     "package": "electron-vite build && electron-builder --config electron-builder.yml --publish never",
     "package:dir": "electron-vite build && electron-builder --dir --config electron-builder.yml",
+    "bench:engine": "tsx scripts/bench-eigen.ts",
     "e2e": "electron-vite build && playwright test"
   },
   "dependencies": {

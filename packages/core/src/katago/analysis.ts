@@ -38,8 +38,12 @@ export interface AnalysisQuery {
   readonly analyzeTurns?: readonly number[]
   readonly includeOwnership?: boolean
   /**
-   * Emit a partial result every N centiseconds. Streaming progress is why this
-   * exists — the UI shows a winrate that firms up rather than a spinner.
+   * Emit a partial result every N **seconds** (verified against
+   * `docs/Analysis_Engine.md` and `cpp/command/analysis.cpp`, 2026-09-05 —
+   * an earlier version of this comment said centiseconds, which the source
+   * refutes: the engine parses it as "number of seconds from 0.001 to
+   * 1000000.0"). Streaming progress is why this exists — the UI shows a
+   * winrate that firms up rather than a spinner.
    */
   readonly reportDuringSearchEvery?: number
 }

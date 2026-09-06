@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { coordSchema, playerSchema } from './game'
+import { errorCodeSchema } from './errors'
+import { boardSizeSchema, coordSchema, gameSetupSchema, playerSchema } from './game'
 
 /**
  * KataGo analysis payloads and engine lifecycle.
@@ -36,12 +37,57 @@ export const engineInfoSchema = z.object({
   /** Measured, not advertised — the detector benchmarks each candidate. */
   visitsPerSecond: z.number().optional(),
   networkName: z.string().optional(),
-  /** Present only when status is 'failed'. */
-  errorCode: z.string().optional(),
+  /**
+   * Present only when status is 'failed'. Parsed through `errorCodeSchema`,
+   * not `z.string()`: the renderer translates this value through the `errors`
+   * i18n namespace, so an invented code must die at this boundary rather than
+   * reach the UI as an untranslatable key. Every code the service assigns is
+   * a member of the enum (`main/katago/service.ts`); a new failure path adds
+   * its code to `errors.ts` in the same commit.
+   */
+  errorCode: errorCodeSchema.optional(),
   /** Present only when status is 'downloading'. 0..1 */
   downloadProgress: z.number().min(0).max(1).optional(),
 })
 export type EngineInfo = z.infer<typeof engineInfoSchema>
+
+/**
+ * Query-id namespace prefixes — the routing contract between main and
+ * renderer for `engine:analysis` (`design.md` §IPC additions). Focus queries
+ * are `focus:<n>`; the sweep tier (Stage 4) reserves `sweep:<moveNumber>`.
+ * Kept in the shared contract (not restated per side) so a rename is a
+ * compile error in both processes at once.
+ */
+export const FOCUS_QUERY_PREFIX = 'focus:'
+export const SWEEP_QUERY_PREFIX = 'sweep:'
+
+/**
+ * The game record an analysis request carries.
+ *
+ * Self-contained by design (`design.md` §IPC additions): the engine service
+ * must not import the library store, so the renderer resends the record (~2KB
+ * for 300 moves — noise) instead of referencing a library id. `moves` is the
+ * full record; `atMove` in the request selects the analysed position, and the
+ * session slices. `rules` is the raw SGF ruleset string — mapping it onto a
+ * KataGo ruleset is the session's job, and unknown values fall back to
+ * `chinese` there, not here: the contract stays honest about what it holds.
+ */
+export const engineGameSchema = z.object({
+  /** Correlates results; filters answers from a since-closed game. */
+  gameId: z.string().min(1),
+  boardSize: boardSizeSchema,
+  komi: z.number(),
+  rules: z.string(),
+  setup: gameSetupSchema,
+  /** Full mainline record. A pass is `coord: null` and must not be dropped. */
+  moves: z.array(
+    z.object({
+      player: playerSchema,
+      coord: coordSchema.nullable(),
+    }),
+  ),
+})
+export type EngineGame = z.infer<typeof engineGameSchema>
 
 /** One candidate move from KataGo's analysis. */
 export const moveInfoSchema = z.object({

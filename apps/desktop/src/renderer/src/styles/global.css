@@ -112,6 +112,92 @@ body {
   opacity: 0.5;
 }
 
+.move-tree__branches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.move-tree__branch {
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.move-tree__branch--active {
+  color: var(--color-text-inverse);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.winrate-graph {
+  margin: var(--space-2) 0 0;
+}
+
+.winrate-graph svg {
+  display: block;
+  width: 100%;
+  height: 72px;
+  cursor: crosshair;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* The pending region: hatched, explicitly not data. The SVG `<pattern>` it
+   fills with is defined in `WinrateGraph.tsx` under the id this rule names —
+   "waiting" reads at a glance and can never be mistaken for a 50% flatline
+   (which additionally never gets a midline here: the midline is drawn only
+   under the analysed region). */
+.winrate-graph__pending {
+  fill: url('#winrate-graph-pending-hatch');
+}
+
+.winrate-graph__pending-base {
+  fill: var(--surface-hover);
+}
+
+.winrate-graph__pending-stripe {
+  stroke: var(--border-strong);
+  stroke-width: 0.4;
+}
+
+.winrate-graph__midline {
+  stroke: var(--border-strong);
+  stroke-width: 0.3;
+  stroke-dasharray: 1 1;
+}
+
+.winrate-graph__area {
+  fill: rgb(201 162 39 / 18%);
+}
+
+.winrate-graph__curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.5;
+}
+
+.winrate-graph__point {
+  fill: var(--accent);
+  cursor: pointer;
+}
+
+.winrate-graph__cursor {
+  stroke: var(--color-success);
+  stroke-width: 0.4;
+}
+
+.winrate-graph__caption {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--muted);
+}
+
 .settings-panel {
   display: flex;
   flex-direction: column;

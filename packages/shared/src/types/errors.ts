@@ -39,6 +39,10 @@ export const errorCodeSchema = z.enum([
 
   // KataGo lifecycle.
   'ENGINE_NOT_FOUND',
+  // What the service actually reports when the binary or weights are absent
+  // from a packaged install (`main/katago/service.ts`); distinct from
+  // `ENGINE_NOT_FOUND`, which is the "no engine configured anywhere" state.
+  'ENGINE_BINARY_MISSING',
   'ENGINE_START_TIMEOUT',
   'ENGINE_CRASHED',
   'ENGINE_CIRCUIT_OPEN',

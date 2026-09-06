@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, RESOURCES_ROOT, RESOURCE_TARGETS, resourceDir } from '../resources'
@@ -51,6 +52,14 @@ import { REPO_ROOT, RESOURCES_ROOT, RESOURCE_TARGETS, resourceDir } from '../res
 const BUILDER_YML = join(RESOURCES_ROOT, '..', ...['electron-builder.yml'])
 
 /**
+ * Reads the whole electron-builder.yml once, for tests that inspect the
+ * per-platform resource layout (not just the top-level `extraResources:` list).
+ */
+function readBuilderYml(): string {
+  return readFileSync(BUILDER_YML, 'utf8')
+}
+
+/**
  * Names electron-builder ignores by default, as they matter here.
  *
  * Not the full list — only the entries a human might plausibly reach for as a
@@ -77,14 +86,22 @@ function extraResourceSources(): string[] {
   const start = source.indexOf('\nextraResources:')
   if (start === -1) return []
 
-  // Stops at the next top-level key — a line beginning with a non-space, non-dash
-  // character. Anything indented belongs to this block.
+  // Collects `from:` entries in the top-level block only; the loop stops at the
+  // next top-level key (`asar:` today). M2 moved the engine entries into nested
+  // `win:` / `linux:` blocks, and those are deliberately NOT collected here:
+  // their directories are fetch artifacts that do not exist on a fresh clone, so
+  // sweeping them for existence would fail CI before any fetch ran. The
+  // per-platform engine entries are pinned textually by the dedicated M2
+  // describe below. A `from:` is unambiguous (no other key in this file uses
+  // it), so matching any indented `from:` inside the block is safe.
   const rest = source
     .slice(start + 1)
     .split('\n')
     .slice(1)
   const out: string[] = []
   for (const line of rest) {
+    // Stop only at the next top-level key; the top-level block is flat, so a
+    // `from:` always appears before any per-platform section can begin.
     if (/^[^\s#-]/.test(line)) break
     const match = /^\s*-?\s*from:\s*(\S+)\s*$/.exec(line)
     if (match?.[1] !== undefined) out.push(match[1])
@@ -135,13 +152,16 @@ function isPackageable(repoPath: string): boolean {
 describe('electron-builder extraResources', () => {
   const sources = extraResourceSources()
 
-  it('finds the extraResources block', () => {
-    // Guards the scanner. If a reformat broke it, every per-directory assertion
-    // below would iterate zero times and pass.
-    expect(
-      sources.length,
-      `no "from:" entries found under extraResources: in ${BUILDER_YML}`,
-    ).toBeGreaterThanOrEqual(3)
+  it('finds the extraResources entries', () => {
+    // Guards the scanner against silently iterating zero times and passing. We
+    // assert the *known-essential* directories are present rather than a raw
+    // count, because M2 moved the per-platform engine entries into nested
+    // `win.extraResources` / `linux.extraResources` blocks while knowledge and
+    // weights stayed top-level. Knowledge and weights are platform-independent
+    // and must always be there; the engine subdirectories are checked separately
+    // below (they exist only after a fetch, which a fresh clone has not done).
+    expect(sources).toContain('resources/knowledge')
+    expect(sources).toContain('resources/weights')
   })
 
   it('every declared source directory exists', () => {
@@ -228,6 +248,174 @@ describe('scripts/resources.ts', () => {
         statSync(readme).size,
         `${target.dir}/README.md looks like an empty placeholder`,
       ).toBeGreaterThan(200)
+    }
+  })
+})
+
+describe('per-platform engine packaging (M2)', () => {
+  // The engine is per-platform, so it moved out of the top-level extraResources
+  // into win/linux blocks. These tests pin the split so a regression that copies
+  // every platform's binary into every installer (tripling the tier) fails here
+  // rather than shipping.
+
+  it('does not copy the whole katago tree at the top level', () => {
+    const yml = readBuilderYml()
+    const top = yml.slice(yml.indexOf('\nextraResources:'))
+    // Everything before the first per-platform `win:` block is the top-level
+    // scope. The bare `resources/katago` copy-everything entry must not be there.
+    const topBlock = top.split('\nwin:')[0] ?? ''
+    expect(topBlock).not.toContain('from: resources/katago\n')
+  })
+
+  it('ships the engine only for platforms with an official build', () => {
+    const yml = readBuilderYml()
+    expect(yml).toContain('from: resources/katago/win32-x64')
+    expect(yml).toContain('from: resources/katago/linux-x64')
+    // No macOS engine: KataGo publishes no macOS binaries (scope decision 6), so
+    // there must be no darwin engine entry to copy a nonexistent directory.
+    const macBlock = (yml.split('\nmac:')[1] ?? '').split('\nlinux:')[0] ?? ''
+    expect(macBlock).not.toContain('resources/katago')
+    expect(yml).not.toContain('darwin')
+  })
+
+  it('copies each platform payload into the subdirectory locate.ts resolves', () => {
+    // The cross-layer half of the packaging contract: in a PACKAGED build,
+    // `paths.ts`'s `engineBinariesDir('<platform>-<arch>')` is where the engine
+    // is looked for, and electron-builder's copyDir places the CONTENTS of
+    // `from` into `to`. So `to` must be `katago/<platform>-<arch>` — a flat
+    // `to: katago` would put `katago.exe` one level too high and a packaged
+    // launch would report ENGINE_BINARY_MISSING while dev mode (which reads the
+    // same `<platform>-<arch>` tree directly) works everywhere. Asserted against
+    // the concrete destination strings the main process resolves, not a
+    // restatement of the rule.
+    const yml = readBuilderYml()
+    const destinationFor = (block: string): string | null =>
+      /from:\s*resources\/katago\/(\S+)\s*\n\s*to:\s*(\S+)/.exec(block)?.[2] ?? null
+    const winBlock = (yml.split('\nwin:')[1] ?? '').split('\nnsis:')[0] ?? ''
+    const linuxBlock = (yml.split('\nlinux:')[1] ?? '').split('\npublish:')[0] ?? ''
+    expect(destinationFor(winBlock)).toBe('katago/win32-x64')
+    expect(destinationFor(linuxBlock)).toBe('katago/linux-x64')
+  })
+
+  it('keeps the local fetch cache (verified archive, partials) out of the installer', () => {
+    // The fetcher retains the sha256-verified zip and any interrupted *.partial
+    // in the platform directory as the resume/re-run cache. electron-builder
+    // copies the directory wholesale, so without an explicit filter the archive
+    // alone would roughly double the engine tier inside every installer. The
+    // cache stays local; only the extracted payload ships.
+    const yml = readBuilderYml()
+    const winBlock = (yml.split('\nwin:')[1] ?? '').split('\nnsis:')[0] ?? ''
+    const linuxBlock = (yml.split('\nlinux:')[1] ?? '').split('\npublish:')[0] ?? ''
+    for (const block of [winBlock, linuxBlock]) {
+      expect(block).toContain('from: resources/katago/')
+      expect(block).toContain('!*.zip')
+      expect(block).toContain('!*.partial')
+    }
+    // The platform-independent weights block has no archive to exclude, but an
+    // interrupted fetch can still leave a *.partial next to the net.
+    const topBlock =
+      yml.slice(yml.indexOf('\nextraResources:')).split('\nwin:')[0] ?? ''
+    expect(topBlock).toContain('!*.partial')
+    expect(topBlock).not.toContain('!*.zip')
+  })
+})
+
+describe('extraResources filters, evaluated with the packager’s glob matcher', () => {
+  /**
+   * The packaging filters are only real if they exclude what they claim to
+   * exclude. The trellis-check verifier measured the gap this guards: a `!*.zip`
+   * glob does not cross `/`, so it matches a top-level archive but lets a
+   * NESTED one (`extracted/nested.zip`) through — and the fetcher today flattens
+   * everything, so a nested archive would mean a layout change the shallow
+   * filter was silently wrong about. The patterns are evaluated with the same
+   * `minimatch` the packager uses underneath (electron-builder's FileMatcher is
+   * too coupled to its macro-expansion context to construct in a unit test, and
+   * the glob semantics are what actually decides what ships).
+   *
+   * Scoped to the engine block because that is where the cache lives; the top
+   * level weights block has no archive to exclude but still must drop a partial.
+   */
+  interface EngineResource {
+    from: string
+    filter: string[]
+  }
+
+  const require = createRequire(import.meta.url)
+
+  /** Parses one `- from:/to:/filter:` entry from the packager config. */
+  function parseEngineResource(block: string): EngineResource {
+    // `from` is captured to the first whitespace, not end-of-line: the block is
+    // multi-line (from, to, filter), so the `from:` line ends with a newline
+    // rather than `$`.
+    const from = /from:\s*(\S+)/.exec(block)?.[1]
+    const filterMatch = /filter:\s*\[([^\]]*)\]/.exec(block)?.[1]
+    if (from === undefined || filterMatch === undefined) {
+      throw new Error(`could not parse engine extraResources entry from:\n${block}`)
+    }
+    const filter = filterMatch
+      .split(',')
+      .map((entry) => entry.trim().replace(/^'|'$/g, '').replace(/^"|"$/g, ''))
+      .filter((entry) => entry !== '')
+    return { from, filter }
+  }
+
+  function engineResources(): EngineResource[] {
+    const yml = readBuilderYml()
+    // The two engine blocks are the only ones carrying an archive-exclusion
+    // filter; collect every `from: resources/katago/` entry regardless of which
+    // platform block holds it. The `[\s\S]*?` between `from` and `filter` spans
+    // the optional `to:` line (and any comment) without crossing into the next
+    // `- from:` entry.
+    const out: EngineResource[] = []
+    const fromRe = /from:\s*resources\/katago\/\S+[\s\S]*?filter:\s*\[[^\]]*\]/g
+    for (const match of yml.matchAll(fromRe)) {
+      out.push(parseEngineResource(match[0]))
+    }
+    return out
+  }
+
+  it('the engine filter excludes nested archives and partials, keeps the payload', () => {
+    const minimatch = require('minimatch') as (path: string, pattern: string) => boolean
+
+    const resources = engineResources()
+    // Sanity: both platform engine blocks were parsed.
+    expect(resources.length).toBeGreaterThanOrEqual(2)
+
+    // The packager decides per file: is it matched by the include and not by
+    // any exclude? A `!`-prefixed pattern excludes. `**/*` — the include — does
+    // not match dotfiles by default, so `!.*` stays as belt-and-braces.
+    const ships = (filter: string[], file: string): boolean => {
+      let included = false
+      for (const pattern of filter) {
+        if (pattern.startsWith('!')) {
+          if (minimatch(file, pattern.slice(1))) return false
+        } else if (minimatch(file, pattern)) {
+          included = true
+        }
+      }
+      return included
+    }
+
+    for (const resource of resources) {
+      // The production filter answers about files UNDER `from`, so probe with
+      // paths relative to it — a nested archive, a nested partial, a top-level
+      // partial, and the payload that must survive.
+      expect(
+        ships(resource.filter, 'katago.exe'),
+        `${resource.from}: payload must ship`,
+      ).toBe(true)
+      expect(
+        ships(resource.filter, 'nested/nested.zip'),
+        `${resource.from}: nested archive must not ship`,
+      ).toBe(false)
+      expect(
+        ships(resource.filter, 'nested/nested.partial'),
+        `${resource.from}: nested partial must not ship`,
+      ).toBe(false)
+      expect(
+        ships(resource.filter, 'cache.zip.partial'),
+        `${resource.from}: top-level partial must not ship`,
+      ).toBe(false)
     }
   })
 })

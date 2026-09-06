@@ -28,7 +28,17 @@ interface ChannelCase {
 const gameFixture = {
   id: 'g1',
   meta: { boardSize: 19, handicap: 0, komi: 6.5 },
+  setup: { black: [], white: [] },
   moves: [{ number: 1, player: 'black', coord: { x: 3, y: 3 } }],
+  // Entry 0 carries the alternatives for the first move; entry 1 is empty
+  // (no branch there). The shape under test: child index, first move, length.
+  branches: [
+    [
+      { index: 0, player: 'black', coord: { x: 3, y: 3 }, moves: 4 },
+      { index: 1, player: 'black', coord: { x: 15, y: 3 }, moves: 2, label: 'jab' },
+    ],
+    [],
+  ],
   source: 'import',
   contentHash: 'abc123',
   importedAt: '2026-08-04T00:00:00Z',
@@ -39,6 +49,56 @@ const summaryFixture = {
   moveCount: 1,
   boardSize: 19,
   source: 'import',
+}
+
+const engineInfoFixture = {
+  status: 'ready',
+  backend: 'eigen',
+  version: 'v1.18.1',
+  visitsPerSecond: 55,
+  networkName: 'kata1-b10c128-s1141046784-d204142634.txt.gz',
+}
+
+/**
+ * The self-contained record an analysis request carries (`engineGameSchema`).
+ * Rules is the raw SGF RU string — mapping it to a KataGo ruleset is main's job,
+ * so the contract deliberately accepts any string, including ''.
+ */
+const engineGameFixture = {
+  gameId: 'g1',
+  boardSize: 19,
+  komi: 6.5,
+  rules: 'japanese',
+  setup: { black: [{ x: 3, y: 3 }], white: [] },
+  moves: [
+    { player: 'black', coord: { x: 15, y: 3 } },
+    { player: 'white', coord: null },
+  ],
+}
+
+const analysisResultFixture = {
+  queryId: 'focus:1',
+  gameId: 'g1',
+  moveNumber: 12,
+  player: 'black',
+  winrate: 0.62,
+  scoreLead: 3.5,
+  visits: 500,
+  candidates: [
+    {
+      coord: { x: 3, y: 3 },
+      winrate: 0.62,
+      scoreLead: 3.5,
+      visits: 400,
+      pv: [
+        { x: 3, y: 3 },
+        { x: 15, y: 15 },
+      ],
+      order: 0,
+    },
+  ],
+  ownership: [0.5, -0.25, 1],
+  complete: false,
 }
 
 const settingsFixture = {
@@ -73,7 +133,20 @@ const settingsFixture = {
 const CASES: Record<ChannelName, ChannelCase> = {
   'sgf:parse': {
     validRequest: { content: '(;GM[1]FF[4]SZ[19])' },
-    invalidRequests: [{}, { content: 42 }, { content: null }],
+    // Following a variation: one child index per branch point, walk order.
+    // Absent (above) is the mainline; an empty array must mean the same.
+    // A path with only a mainline choice is legal too — child 0 is the
+    // default continuation at every branch point.
+    invalidRequests: [
+      {},
+      { content: 42 },
+      { content: null },
+      // Child indices are non-negative integers: -1 addresses no child.
+      { content: '(;GM[1])', variationPath: [-1] },
+      { content: '(;GM[1])', variationPath: [1.5] },
+      // Not an array of indices at all.
+      { content: '(;GM[1])', variationPath: 'main' },
+    ],
     validResponse: gameFixture,
     invalidResponses: [
       {},
@@ -81,6 +154,18 @@ const CASES: Record<ChannelName, ChannelCase> = {
       { ...gameFixture, meta: { ...gameFixture.meta, boardSize: 21 } },
       // Move numbers are 1-based; 0 is the empty board, not a move.
       { ...gameFixture, moves: [{ number: 0, player: 'black', coord: null }] },
+      // A branch option without its alternative's move count is not choosable.
+      {
+        ...gameFixture,
+        branches: [[{ index: 0, player: 'black', coord: { x: 3, y: 3 } }]],
+      },
+      // Branch entries must be arrays of options, not bare options.
+      { ...gameFixture, branches: [{ index: 0 }] },
+      // Negative child indices address no SGF child.
+      {
+        ...gameFixture,
+        branches: [[{ index: -1, player: 'black', coord: null, moves: 1 }]],
+      },
     ],
   },
   'sgf:serialize': {
@@ -162,6 +247,75 @@ const CASES: Record<ChannelName, ChannelCase> = {
     validResponse: { present: true },
     invalidResponses: [{}, { present: 'yes' }],
   },
+
+  'engine:info': {
+    validRequest: {},
+    invalidRequests: [null, 42],
+    validResponse: engineInfoFixture,
+    invalidResponses: [
+      {},
+      // Backend is a closed enum: the badge renders it and the i18n allowlist
+      // pins the four display names, so an unknown value must not parse.
+      { ...engineInfoFixture, backend: 'quantum' },
+      { ...engineInfoFixture, visitsPerSecond: 'fast' },
+    ],
+  },
+  'engine:start': {
+    validRequest: {},
+    invalidRequests: [null, 'start'],
+    // A failed start carries the code the renderer translates — the same
+    // envelope discipline as a thrown error, but status is a state, not an
+    // exception (`error-handling.md`).
+    validResponse: {
+      ...engineInfoFixture,
+      status: 'failed',
+      errorCode: 'ENGINE_BINARY_MISSING',
+    },
+    invalidResponses: [
+      {},
+      // errorCode is the renderer's translation key; a non-string must not parse.
+      { status: 'failed', errorCode: 7 },
+      // Nor may an INVENTED code: it is parsed through `errorCodeSchema`, so a
+      // failure path that reaches for a code nobody added to `errors.ts` dies
+      // at this boundary instead of reaching the UI as an untranslatable key.
+      // (`ENGINE_TIMEOUT` is exactly such a ghost — it is named in the task's
+      // design prose but was never a member; the shipped code is
+      // `ENGINE_START_TIMEOUT`.)
+      { status: 'failed', errorCode: 'ENGINE_TIMEOUT' },
+      { ...engineInfoFixture, downloadProgress: 1.5 },
+    ],
+  },
+  'engine:setGame': {
+    validRequest: { game: engineGameFixture, atMove: 2 },
+    invalidRequests: [
+      {},
+      // Clearing the record is the one legal null — a missing key is not it.
+      { atMove: 0 },
+      { game: { ...engineGameFixture, gameId: '' }, atMove: 0 },
+      { game: engineGameFixture, atMove: -1 },
+    ],
+    // The response names the focus query the game open will produce, or null
+    // when nothing will be issued (cleared, or the engine is not ready) — both
+    // of those are legal, so the invalid cases must violate shape or type.
+    validResponse: { focusQueryId: 'focus:1' },
+    invalidResponses: [
+      {},
+      { focusQueryId: 7 },
+      { focusQueryId: false },
+      { queryId: 'focus:1' },
+    ],
+  },
+  'engine:setCursor': {
+    validRequest: { moveNumber: 12 },
+    invalidRequests: [
+      {},
+      { moveNumber: -1 },
+      { moveNumber: 1.5 },
+      { moveNumber: '12' },
+    ],
+    validResponse: { focusQueryId: null },
+    invalidResponses: [{}, { focusQueryId: 1 }, { focusQueryId: ['focus:2'] }],
+  },
 }
 
 const EVENT_CASES: Record<
@@ -208,6 +362,31 @@ const EVENT_CASES: Record<
   'engine:status': {
     valid: { status: 'unavailable' },
     invalid: [{}, { status: 'confused' }, { status: 'ready', downloadProgress: 2 }],
+  },
+  'engine:analysis': {
+    valid: analysisResultFixture,
+    invalid: [
+      {},
+      // winrate is 0..1; the renderer renders it as a percentage and a value
+      // outside the range would paint nonsense on the readout.
+      { ...analysisResultFixture, winrate: 1.4 },
+      // A candidate without a winrate is not a suggestion — it must not parse.
+      {
+        ...analysisResultFixture,
+        candidates: [
+          {
+            coord: { x: 3, y: 3 },
+            scoreLead: 3.5,
+            visits: 400,
+            pv: [],
+            order: 0,
+          },
+        ],
+      },
+      // Ownership values outside -1..1 are not a confident estimate, they are
+      // a protocol violation.
+      { ...analysisResultFixture, ownership: [0.5, -3] },
+    ],
   },
 }
 
@@ -306,6 +485,28 @@ describe('coverage meta-test', () => {
     for (const name of CHANNEL_NAMES) {
       expect(name, `${name} must be domain:verb`).toMatch(/^[a-z]+:[a-zA-Z]+$/)
     }
+  })
+})
+
+describe('sgf:parse variationPath acceptance', () => {
+  // The channel case above proves one valid mainline request; these pin the
+  // path shapes the branch picker actually sends. An empty path is the
+  // mainline (what `open` sends once Stage 4 stores one), and a path mixes
+  // child indices from several branch points.
+  it('accepts an empty variationPath', () => {
+    expectAccepts(
+      CHANNELS['sgf:parse'].request,
+      { content: '(;GM[1])', variationPath: [] },
+      'sgf:parse request',
+    )
+  })
+
+  it('accepts a multi-branch path with a mainline (0) entry', () => {
+    expectAccepts(
+      CHANNELS['sgf:parse'].request,
+      { content: '(;GM[1])', variationPath: [0, 2, 1] },
+      'sgf:parse request',
+    )
   })
 })
 

@@ -11,6 +11,7 @@
     "SGF_UNSUPPORTED_ENCODING": "无法按原文件的编码保存,请另存为 UTF-8。",
     "BOARD_INVALID_COORD": "坐标超出棋盘范围。",
     "ENGINE_NOT_FOUND": "找不到 KataGo 引擎。",
+    "ENGINE_BINARY_MISSING": "安装中缺少 KataGo 引擎,请重新安装。",
     "ENGINE_START_TIMEOUT": "引擎启动超时。",
     "ENGINE_CRASHED": "引擎意外退出。",
     "ENGINE_CIRCUIT_OPEN": "引擎反复启动失败,已暂停重试。",

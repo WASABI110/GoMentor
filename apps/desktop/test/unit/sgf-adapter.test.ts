@@ -268,3 +268,254 @@ describe('toSummary', () => {
     expect(toSummary(handicap.game).moveCount).toBe(handicap.game.moves.length)
   })
 })
+
+describe('variation lines and branch options (Stage 4)', () => {
+  /**
+   * Read-only branch navigation's projection (`design.md` §Branch navigation).
+   * Every expectation below was probed against the real file, not predicted:
+   * SGF's first-child convention means a file's "mainline" already continues
+   * into the first variation, which is why `gnugo-9x9-4-qgo-var.sgf` reports
+   * 33 mainline moves for what reads like 18 + two variations.
+   *
+   * The load-bearing decisions:
+   *
+   * - `variationPath` selects the line; absent/short means mainline, extra
+   *   elements are never consumed, and an out-of-range index is the caller's
+   *   bug (`IPC_INVALID_REQUEST`), not a file defect;
+   * - `branches` is indexed by arrival index — entry `c` lists the
+   *   alternatives at the node reached with `c` moves applied, so an
+   *   end-of-record branch point sits at `moves.length` (qgo: 18) while a
+   *   before-the-first-move point sits at 0 (ff4_ex);
+   * - option `index` is the SGF child index, kept verbatim even when
+   *   move-less alternatives make it non-contiguous — it is exactly what a
+   *   re-parse's `variationPath` consumes;
+   * - the array is dense: holes would cross IPC as `null`.
+   */
+  function load(name: string): ReturnType<typeof parseSgf> {
+    return parseSgf(new Uint8Array(readFileSync(join(FIXTURES, name))))
+  }
+
+  function project(name: string, variationPath?: readonly number[]): Game {
+    return toGame(load(name), {
+      ...OPTIONS,
+      ...(variationPath === undefined ? {} : { variationPath }),
+    })
+  }
+
+  const QGO_VAR = 'gnugo-9x9-4-qgo-var.sgf'
+
+  it('the mainline walks first children: 18 moves + the first variation = 33 moves', () => {
+    const game = project(QGO_VAR)
+    expect(game.moves).toHaveLength(33)
+    // One branch point: the last mainline node, whose two children are the
+    // variations. Arrival index 18 = the position after move 18.
+    expect(game.branches).toHaveLength(19)
+    expect(game.branches.slice(0, 18).every((entry) => entry.length === 0)).toBe(true)
+    expect(game.branches[18]).toEqual([
+      // Child 0 — the default continuation, itself 15 moves long (and the
+      // reason the mainline is 33 moves, not 18).
+      { index: 0, player: 'black', coord: { x: 7, y: 6 }, moves: 15 },
+      // Child 1 — the 11-move alternative. Its C[B+8.0] sits on the line's
+      // LAST node, so it is not the option label (labels come from the
+      // alternative's first node); it rides as the final move's comment,
+      // asserted in the variation test below.
+      { index: 1, player: 'black', coord: { x: 8, y: 4 }, moves: 11 },
+    ])
+  })
+
+  it('a variationPath selects the line: [1] follows the 11-move alternative', () => {
+    const game = project(QGO_VAR, [1])
+    expect(game.moves).toHaveLength(29)
+    const last = game.moves.at(-1)
+    expect(last?.player).toBe('black')
+    expect(last?.coord).toEqual({ x: 1, y: 4 })
+    // Comments ride the projection on any line, not only the mainline.
+    expect(last?.comment).toBe('B+8.0')
+    // The branch point lies ON the followed line (the walk passes through the
+    // same node), so its options are reported identically.
+    expect(game.branches[18]).toHaveLength(2)
+    // And the id is the same record: two branches of one file share the
+    // content-hash id (the engine correlation suffix lives in gameStore).
+    expect(game.id).toBe(project(QGO_VAR).id)
+  })
+
+  it('[0] is the default continuation and reproduces the mainline', () => {
+    expect(project(QGO_VAR, [0]).moves).toHaveLength(33)
+  })
+
+  it('extra path elements are never consumed — the line has no more branch points', () => {
+    expect(project(QGO_VAR, [0, 0]).moves).toHaveLength(33)
+    expect(project('katago-messy.sgf', [0, 0, 1]).moves).toHaveLength(5)
+  })
+
+  it('an out-of-range child index is IPC_INVALID_REQUEST with locating context', () => {
+    let caught: unknown
+    try {
+      project(QGO_VAR, [2])
+    } catch (error) {
+      caught = error
+    }
+    expect(isAppError(caught) && caught.code).toBe('IPC_INVALID_REQUEST')
+    if (isAppError(caught)) {
+      expect(caught.context).toEqual({ branchPoint: 0, childIndex: 2, children: 2 })
+    }
+
+    // A non-integer index fails the same check and reports null for the value
+    // (the IPC schema already rejects fractions; this is the projection's own
+    // tripwire for callers that bypass it).
+    try {
+      project(QGO_VAR, [1.5])
+    } catch (error) {
+      caught = error
+    }
+    expect(isAppError(caught) && caught.code).toBe('IPC_INVALID_REQUEST')
+    if (isAppError(caught)) {
+      expect(caught.context).toEqual({ branchPoint: 0, childIndex: null, children: 2 })
+    }
+  })
+
+  it('option indices stay child indices even when alternatives are skipped', () => {
+    // `gogui-ff4_ex.sgf`'s root has five children; children 1 and 2 are
+    // setup-only chains with no move in them, so they are skipped and the
+    // offered indices read 0, 3, 4. A display ordinal (0, 1, 2) would break
+    // the round-trip: re-parsing with the ordinal would follow the wrong
+    // child.
+    const game = project('gogui-ff4_ex.sgf')
+    expect(game.branches[0]?.map((option) => option.index)).toEqual([0, 3, 4])
+    expect(game.branches[0]?.map((option) => option.moves)).toEqual([13, 3, 21])
+    // The label rides from the alternative's first-node comment — ff4_ex
+    // carries one on every child, so each option here is labelled.
+    expect(game.branches[0]?.every((option) => typeof option.label === 'string')).toBe(
+      true,
+    )
+  })
+
+  it('a move-less alternative before a real branch point consumes no path element', () => {
+    // Crafted minimal case — no corpus variation file carries this shape
+    // (every corpus branch point has ≥ 2 usable children, so the real-file
+    // tests above cannot see the misalignment). A node whose extra child is a
+    // setup-only chain is NOT a branch point: the renderer stores one path
+    // element per branch point it can actually choose at, and `followLine`
+    // must consume at exactly those nodes (`branchAlternatives` is the single
+    // definition both read). A walker that consumed an element at every
+    // multi-child node would spend this choice one node early and the
+    // re-parse would follow the setup-only chain — a silent wrong line.
+    const collection = parseSgf(
+      '(;SZ[9];B[aa](;W[bb](;B[cc];W[dd])(;B[ee];W[ff]))(;AB[gg]C[setup-only]))',
+    )
+    const projectPath = (variationPath?: readonly number[]): Game =>
+      toGame(collection, {
+        ...OPTIONS,
+        ...(variationPath === undefined ? {} : { variationPath }),
+      })
+
+    // Arrival 1 has two children but only ONE usable alternative (the
+    // setup-only chain is filtered), so it is not a branch point at all: no
+    // picker renders there, no path element belongs to it, and the density
+    // fill reports [] like any non-branch node.
+    expect(projectPath().branches[1]).toEqual([])
+    // Arrival 2 is the real branch point: two 2-move lines.
+    const chosen = projectPath([1])
+    expect(chosen.moves).toHaveLength(4)
+    // B[ee] is (4,4) and W[ff] is (5,5) on a 9×9 — the chosen line, not the
+    // setup-only chain and not the default B[cc];W[dd] continuation.
+    expect(chosen.moves[2]).toMatchObject({ player: 'black', coord: { x: 4, y: 4 } })
+    expect(chosen.moves[3]).toMatchObject({ player: 'white', coord: { x: 5, y: 5 } })
+    // The default continuation is unchanged: [0] still follows child 0 at the
+    // real branch point, and the setup-only chain stays unaddressable.
+    expect(projectPath([0]).moves[2]).toMatchObject({
+      player: 'black',
+      coord: { x: 2, y: 2 },
+    })
+  })
+
+  it('an alternative that opens with a pass reports coord null, not a sentinel', () => {
+    const game = project('katago-messy.sgf')
+    const atTwo = game.branches[2]
+    expect(atTwo?.map((option) => option.index)).toEqual([0, 1])
+    expect(atTwo?.[0]?.coord).toEqual({ x: 5, y: 5 })
+    expect(atTwo?.[1]?.coord).toBeNull()
+    expect(atTwo?.[1]?.moves).toBe(6)
+  })
+
+  it('branch options on a followed variation line are collected too', () => {
+    // katato-messy's child 0 contains its own branch points: following it and
+    // then choosing at its second branch point yields a line with a third,
+    // three-option branch point nested inside the variation.
+    const game = project('katago-messy.sgf', [0, 1])
+    expect(game.moves).toHaveLength(8)
+    const nonEmpty = game.branches
+      .map((entry, index) => [index, entry.length] as const)
+      .filter(([, count]) => count > 0)
+    expect(nonEmpty).toEqual([
+      [0, 2],
+      [2, 2],
+      [6, 3],
+    ])
+  })
+
+  it('four options at one branch point stay addressable', () => {
+    const game = project('sabaki-sgf-no-ca.sgf')
+    expect(game.branches[0]?.map((option) => option.index)).toEqual([0, 1, 2, 3])
+    // Each alternative is a genuinely different line, not a re-numbered copy.
+    expect(project('sabaki-sgf-no-ca.sgf', [1]).moves).toHaveLength(6)
+    expect(project('sabaki-sgf-no-ca.sgf', [2]).moves).toHaveLength(4)
+    expect(project('sabaki-sgf-no-ca.sgf', [3]).moves).toHaveLength(6)
+    expect(project('sabaki-sgf-no-ca.sgf', [1]).moves[0]?.coord).toEqual({
+      x: 11,
+      y: 2,
+    })
+    // A deeper element with no branch point to consume it changes nothing.
+    expect(project('sabaki-sgf-no-ca.sgf', [1, 1]).moves).toHaveLength(6)
+  })
+
+  it('a mid-record branch point sits at its arrival index, not the end', () => {
+    // dublin2 branches at move 69 of 243; its alternative is a single move.
+    const game = project('gnugo-dublin2-var-tbtw.sgf')
+    expect(
+      game.branches.flatMap((entry, index) => (entry.length > 0 ? [index] : [])),
+    ).toEqual([69])
+    const variation = project('gnugo-dublin2-var-tbtw.sgf', [1])
+    expect(variation.moves).toHaveLength(70)
+    expect(variation.moves[69]?.coord).toEqual({ x: 18, y: 3 })
+  })
+
+  it('a record with several mid-record branch points reports each', () => {
+    const game = project('katago-sampletest9x9.sgf')
+    const indices = game.branches.flatMap((entry, index) =>
+      entry.length > 0 ? [index] : [],
+    )
+    expect(indices).toEqual([2, 12, 15])
+    expect(game.branches[2]?.[1]?.label).toBe('%HINT%')
+    expect(game.branches[15]?.[0]?.player).toBe('white')
+  })
+
+  it('branches is dense: every entry is an array, never a hole', () => {
+    // JSON has no array holes — a sparse JS array would cross IPC as nulls
+    // and fail the schema on the other side. The projection fills, and this
+    // is the guard that keeps it filling.
+    for (const name of [QGO_VAR, 'katago-messy.sgf', 'gogui-ff4_ex.sgf']) {
+      const branches = project(name).branches
+      for (let index = 0; index < branches.length; index += 1) {
+        expect(Array.isArray(branches[index]), `${name} [${String(index)}]`).toBe(true)
+      }
+    }
+    expect(project(QGO_VAR).branches[0]).toEqual([])
+  })
+
+  it('a variation line replays cleanly like any other projection', () => {
+    // Branch navigation is read-only review: the selected line must satisfy
+    // the same whole-record replay property the mainline sweep asserts.
+    for (const [name, path] of [
+      [QGO_VAR, [1]],
+      ['katago-messy.sgf', [0, 1]],
+      ['gnugo-dublin2-var-tbtw.sgf', [1]],
+      ['sabaki-sgf-no-ca.sgf', [2]],
+    ] as const) {
+      const game = project(name, [...path])
+      const result = replay(game, game.moves.length)
+      expect(result.stopped, `${name} ${JSON.stringify(path)}`).toBeUndefined()
+      expect(result.applied).toBe(game.moves.length)
+    }
+  })
+})

@@ -99,6 +99,30 @@ export const gameSetupSchema = z.object({
 })
 export type GameSetup = z.infer<typeof gameSetupSchema>
 
+/**
+ * One branch alternative offered at a mainline branch point (Stage 4's
+ * read-only branch navigation, `design.md` §Branch navigation).
+ *
+ * `index` is the SGF **child index** of the alternative: 0 is always the
+ * default continuation (SGF's first-child mainline convention), 1.. are the
+ * variations. It is a child index, not a display ordinal, because that is
+ * exactly what `sgf:parse`'s `variationPath` consumes — the picker round-trips
+ * the value without a mapping.
+ */
+export const branchOptionSchema = z.object({
+  /** SGF child index; 0 = the default (first-child) continuation. */
+  index: z.number().int().min(0),
+  /** Player of the alternative's first move. */
+  player: playerSchema,
+  /** First move of the alternative, `null` when it opens with a pass. */
+  coord: coordSchema.nullable(),
+  /** Move count of the alternative's own mainline (first child at each step). */
+  moves: z.number().int().min(1),
+  /** The alternative's first-node comment, when the file provides one. */
+  label: z.string().optional(),
+})
+export type BranchOption = z.infer<typeof branchOptionSchema>
+
 export const gameSchema = z.object({
   id: z.string().min(1),
   meta: gameMetaSchema,
@@ -113,6 +137,17 @@ export const gameSchema = z.object({
   setup: gameSetupSchema.prefault({}),
   /** Mainline moves. Variations live in the GameTree AST, not here. */
   moves: z.array(moveSchema),
+  /**
+   * Branch options along the projected line, indexed by **arrival index** (the
+   * cursor position at which the options apply): entry `c` lists the child
+   * alternatives of the node reached with `c` moves applied. Entry 0 (options
+   * for the first move) sits at index 0; a branch point after the last move
+   * sits at index `moves.length`. Entries where the node has no alternatives
+   * are empty arrays, and the array is `[]` for a record with no branches at
+   * all (dense, not sparse: JSON has no array holes — a sparse JS array would
+   * cross IPC as `null`s and need a hole-tolerant schema for nothing).
+   */
+  branches: z.array(z.array(branchOptionSchema)).prefault([]),
   source: gameSourceSchema,
   /** Content hash of the original SGF, used for import dedupe. */
   contentHash: z.string(),

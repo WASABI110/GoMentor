@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "assets": {
+    "engine:win32-x64": {
+      "sha256": "0d62ffa41ee04dd89dd1b80fe45e306c837231cb1e2dccb4f5780d0ca7c313db"
+    },
+    "weights": {
+      "sha256": "48d6754de3c4754f95bf6a5ca40957a49e5e915aaaeede133a17b9ccf8fa5fcb"
+    },
+    "fallbackWeights": {
+      "sha256": "3d8a24697ba25fe4da39af4c2b6bd405907b0ad8295322f5a550fa2d8fe4a2f4"
+    }
+  }
+}

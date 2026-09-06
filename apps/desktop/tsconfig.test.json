@@ -36,6 +36,10 @@
   // which this project deliberately lacks — main has no `window` at runtime and a
   // main-process test referencing one must not compile. See
   // `tsconfig.renderer-test.json`.
-  "include": ["test/**/*.ts"],
+  //
+  // `scripts/**` runs under tsx like the tests (ESM — the benchmark needs
+  // `import.meta.url`), which is why it does not join `tsconfig.node.json`'s
+  // CJS project.
+  "include": ["test/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["test/e2e/**", "test/renderer/**"]
 }

@@ -32,12 +32,26 @@ export function registerSgfHandlers(store: GameStore, now: () => string): void {
       source: 'manual',
       importedAt: now(),
       contentHash: hash,
+      ...(request.variationPath === undefined
+        ? {}
+        : { variationPath: request.variationPath }),
     })
 
     // The AST is retained beside the Game. `sgf:serialize` writes from the AST,
     // never from `Game.moves`, because the projection drops variations and
     // unknown properties — writing from it would violate A5.
-    store.put({ game, collection })
+    //
+    // For content the store already knows (a branch re-parse of an open file
+    // answers the same hash), the stored Game stays the first projection: a
+    // read-only branch view must not rewrite the library row it shares the
+    // entry with — the move count a user saw when importing is the move count
+    // the list keeps showing. The collection is identical either way.
+    const existing = store.get(hash)
+    store.put(
+      existing === undefined
+        ? { game, collection }
+        : { game: existing.game, collection },
+    )
 
     // No `content` in these fields: it is a game record, which
     // `logging-guidelines.md` forbids logging. The move count is the useful
@@ -45,6 +59,9 @@ export function registerSgfHandlers(store: GameStore, now: () => string): void {
     logger.info('parsed sgf', {
       moveCount: game.moves.length,
       boardSize: game.meta.boardSize,
+      ...(request.variationPath === undefined || request.variationPath.length === 0
+        ? {}
+        : { variationPathLength: request.variationPath.length }),
     })
     return game
   })

@@ -66,8 +66,12 @@ export function assertBuilt(): void {
  * wrong regardless — Playwright's `env` is `Record<string, string>`, so the value
  * would arrive as the *string* `"undefined"`, which Electron finds truthy. The
  * "fix" would reintroduce the exact failure it was meant to prevent.
+ *
+ * Exported because the packaged-launch spec calls `_electron.launch` directly
+ * (its subject is the product binary, not `OUT_MAIN`), and a spec that
+ * re-derives this by hand would copy the omission trick without the reason.
  */
-function launchEnv(extra: Record<string, string> = {}): Record<string, string> {
+export function launchEnv(extra: Record<string, string> = {}): Record<string, string> {
   const { ELECTRON_RUN_AS_NODE: _asNode, ...rest } = process.env
 
   return {

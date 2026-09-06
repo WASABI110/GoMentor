@@ -1,5 +1,6 @@
 /**
- * Mutation harness for the katago protocol layer.
+ * Mutation harness for the katago protocol layer and the M2 lifecycle's pure
+ * modules.
  *
  * A passing suite proves the code does not crash. It does not prove the
  * assertions are load-bearing. This deliberately breaks each decision the layer
@@ -9,6 +10,16 @@
  * differs from the baseline, the mutation broke collection rather than behaviour,
  * and the result is reported as INVALID — never as "caught". A syntax error that
  * takes the whole file down would otherwise read as a perfect score.
+ *
+ * Two suites run per mutation: the protocol layer (`packages/core/test/katago`)
+ * and the M2 lifecycle's pure decision modules (`apps/desktop/test/unit/katago`
+ * and the `katago-*` unit files — config builder, locate policy and launch
+ * planning, stderr ring buffer, status state machine, tick coalescer,
+ * perspective adapter, analysis session, sweep ledger). A third run covers
+ * the SGF adapter's branch projection (`apps/desktop/test/unit/sgf-adapter`),
+ * whose mutants (line following, option indexing, density) the katago suites
+ * never load. The totals are summed; a mutation that changes any count
+ * invalidates the run.
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -293,26 +304,475 @@ const MUTATIONS: Mutation[] = [
     from: '  const coord = tryFromGtp(move, size)\n  if (coord === undefined) return null',
     to: '  const coord = tryFromGtp(move, size) ?? null',
   },
+  // --- config.ts: the perspective pin and flowed-through params ------------
+  {
+    id: 'M37',
+    file: 'apps/desktop/src/main/katago/config.ts',
+    what: 'unpin the winrate perspective (SIDETOMOVE -> BLACK)',
+    from: "    'reportAnalysisWinratesAs = SIDETOMOVE',",
+    to: "    'reportAnalysisWinratesAs = BLACK',",
+  },
+  {
+    id: 'M38',
+    file: 'apps/desktop/src/main/katago/config.ts',
+    what: 'stop flowing the thread split from settings (pin sweep positions to 8)',
+    from: '    `numAnalysisThreads = ${String(split.positions)}`,',
+    to: '    `numAnalysisThreads = 8`,',
+  },
+  {
+    id: 'M39',
+    file: 'apps/desktop/src/main/katago/config.ts',
+    what: 'drop the batch size line entirely',
+    from: '    `nnMaxBatchSize = ${String(NN_MAX_BATCH_SIZE)}`,\n',
+    to: '',
+  },
+  {
+    id: 'M40',
+    file: 'apps/desktop/src/main/katago/config.ts',
+    what: 'stop flowing the default visit cap from settings',
+    from: '    `maxVisits = ${String(params.maxVisits)}`,',
+    to: '    `maxVisits = 500`,',
+  },
+  // --- locate.ts: override precedence, target mapping, network selection ---
+  {
+    id: 'M41',
+    file: 'apps/desktop/src/main/katago/locate.ts',
+    what: 'ignore the env override and always use the bundled binary',
+    from: "  if (input.envOverride !== undefined && input.envOverride !== '') {",
+    to: '  if (false) {',
+  },
+  {
+    id: 'M42',
+    file: 'apps/desktop/src/main/katago/locate.ts',
+    what: 'un-map the win32 target (report no Windows engine)',
+    from: "  if (platform === 'win32') return 'win32-x64'",
+    to: "  if (platform === 'win32') return null",
+  },
+  {
+    id: 'M43',
+    file: 'apps/desktop/src/main/katago/locate.ts',
+    what: 'pick the first net even when the directory holds several',
+    from: '  return matches.length === 1 ? (matches[0] ?? null) : null',
+    to: '  return matches[0] ?? null',
+  },
+  {
+    id: 'M44',
+    file: 'apps/desktop/src/main/katago/locate.ts',
+    what: 'report dev mode even in a packaged build',
+    from: "  const defaultMode: LocateMode = input.isPackaged ? 'packaged' : 'dev'",
+    to: "  const defaultMode: LocateMode = 'dev'",
+  },
+  // --- ring-buffer.ts: the bound and the drop order -------------------------
+  {
+    id: 'M45',
+    file: 'apps/desktop/src/main/katago/ring-buffer.ts',
+    what: 'remove the capacity bound (unbounded growth)',
+    from: '      if (lines.length > capacity) {',
+    to: '      if (false) {',
+  },
+  {
+    id: 'M46',
+    file: 'apps/desktop/src/main/katago/ring-buffer.ts',
+    what: 'drop the NEWEST lines instead of the oldest',
+    from: '        lines = lines.slice(lines.length - capacity)',
+    to: '        lines = lines.slice(0, capacity)',
+  },
+  // --- state-machine.ts: guards on the transition table -------------------
+  {
+    id: 'M47',
+    file: 'apps/desktop/src/main/katago/state-machine.ts',
+    what: 'start-requested always restarts, breaking idempotence',
+    from: "      return current === 'unavailable' || current === 'failed' ? 'starting' : current",
+    to: "      return 'starting'",
+  },
+  {
+    id: 'M48',
+    file: 'apps/desktop/src/main/katago/state-machine.ts',
+    what: 'probe-succeeded resurrects any phase to ready',
+    from: "      return current === 'starting' ? 'ready' : current",
+    to: "      return 'ready'",
+  },
+  {
+    id: 'M49',
+    file: 'apps/desktop/src/main/katago/state-machine.ts',
+    what: 'crashed fails even from unavailable/failed',
+    from: "      return current === 'starting' || current === 'ready' ? 'failed' : current",
+    to: "      return 'failed'",
+  },
+  {
+    id: 'M50',
+    file: 'apps/desktop/src/main/katago/state-machine.ts',
+    what: 'missing-in-dev reports failed instead of unavailable',
+    from: "      return current === 'starting' ? 'unavailable' : current",
+    to: "      return current === 'starting' ? 'failed' : current",
+  },
+  // --- coalesce.ts: latest-wins, the window boundary, the flush stamp --------
+  {
+    id: 'M51',
+    file: 'apps/desktop/src/main/katago/coalesce.ts',
+    what: 'queue behind a held tick instead of replacing it (not latest-wins)',
+    from: '    state: { lastEmitAtMs: state.lastEmitAtMs, pending: { atMs, value } },',
+    to: '    state: { lastEmitAtMs: state.lastEmitAtMs, pending: state.pending },',
+  },
+  {
+    id: 'M52',
+    file: 'apps/desktop/src/main/katago/coalesce.ts',
+    what: 'hold a tick even exactly one interval after the last emission',
+    from: 'state.lastEmitAtMs === null || atMs - state.lastEmitAtMs >= intervalMs',
+    to: 'state.lastEmitAtMs === null || atMs - state.lastEmitAtMs > intervalMs',
+  },
+  {
+    id: 'M53',
+    file: 'apps/desktop/src/main/katago/coalesce.ts',
+    what: 'stamp the flush with the hold moment, doubling the steady-state rate',
+    from: '  return {\n    state: { lastEmitAtMs: atMs, pending: null },\n    emit: state.pending.value,\n  }',
+    to: '  return {\n    state: { lastEmitAtMs: state.pending.atMs, pending: null },\n    emit: state.pending.value,\n  }',
+  },
+  {
+    id: 'M54',
+    file: 'apps/desktop/src/main/katago/coalesce.ts',
+    what: 'leave the stale flush timer armed after an immediate emission',
+    from: '        if (cancelTimer !== null) {\n          cancelTimer()\n          cancelTimer = null\n        }',
+    to: '',
+  },
+  // --- perspective.ts: what flips, when, and what must never move ------------
+  {
+    id: 'M55',
+    file: 'apps/desktop/src/main/katago/perspective.ts',
+    what: 'flip winrate too (double-counting the side-to-move perspective)',
+    from: '    scoreLead: -result.scoreLead,',
+    to: '    winrate: 1 - result.winrate,\n    scoreLead: -result.scoreLead,',
+  },
+  {
+    id: 'M56',
+    file: 'apps/desktop/src/main/katago/perspective.ts',
+    what: 'negate when BLACK is to move instead of White',
+    from: "  if (playerToMove === 'black') {",
+    to: "  if (playerToMove === 'white') {",
+  },
+  {
+    id: 'M57',
+    file: 'apps/desktop/src/main/katago/perspective.ts',
+    what: 'negate the root scoreLead but not the candidates’',
+    from: '    candidates: result.candidates.map((candidate) => ({\n      ...candidate,\n      scoreLead: -candidate.scoreLead,\n    })),',
+    to: '    candidates: result.candidates,',
+  },
+  // --- session.ts: supersede, id correlation, terminated replies, adaptation --
+  {
+    id: 'M58',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'supersede without terminating the prior focus query',
+    from: '    terminateCurrentFocus()\n    options.send(encodeAnalysisRequest(query))',
+    to: '    options.send(encodeAnalysisRequest(query))',
+  },
+  {
+    id: 'M59',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'issue the debounced cursor under a fresh id, breaking the eager-id contract',
+    from: '        issueFocus(held.queryId, held.moveNumber)',
+    to: '        issueFocus(nextFocusId(), held.moveNumber)',
+  },
+  {
+    id: 'M61',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'skip the perspective adaptation on the emission path',
+    from: '      const normalized = normalizeAnalysisResult(result, entry.player)\n      entry.coalescer.offer(normalized)',
+    to: '      const normalized = result\n      entry.coalescer.offer(normalized)',
+  },
+  // --- locate.ts: the script-override discriminator --------------------------
+  {
+    id: 'M62',
+    file: 'apps/desktop/src/main/katago/locate.ts',
+    what: 'match the script-extension discriminator case-sensitively (.TS launches raw)',
+    from: 'const SCRIPT_EXTENSIONS = /\\.(?:ts|mts|cts|mjs|cjs|js)$/i',
+    to: 'const SCRIPT_EXTENSIONS = /\\.(?:ts|mts|cts|mjs|cjs|js)$/',
+  },
+  // --- sweep.ts: the ledger's ordering, skip sets, bounds, and wire identity ---
+  {
+    id: 'M63',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'resume highest-first (the graph would fill from the end of the game)',
+    from: '  for (let move = 0; move <= ledger.moveCount; move += 1) {',
+    to: '  for (let move = ledger.moveCount; move >= 0; move -= 1) {',
+  },
+  {
+    id: 'M64',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 're-issue failed moves forever (resume ignores the failed set)',
+    from: '    if (!ledger.completed.has(move) && !ledger.failed.has(move)) return move',
+    to: '    if (!ledger.completed.has(move)) return move',
+  },
+  {
+    id: 'M65',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'let markSweepComplete pollute the ledger with out-of-range moves',
+    from: '  if (move >= 0 && move <= ledger.moveCount) ledger.completed.add(move)',
+    to: '  ledger.completed.add(move)',
+  },
+  {
+    id: 'M66',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'let markSweepFailed pollute the ledger with out-of-range moves',
+    from: '  if (move >= 0 && move <= ledger.moveCount) ledger.failed.add(move)',
+    to: '  ledger.failed.add(move)',
+  },
+  {
+    id: 'M67',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'shift the sweep wire id off by one',
+    from: '  return `${SWEEP_QUERY_PREFIX}${String(moveNumber)}`',
+    to: '  return `${SWEEP_QUERY_PREFIX}${String(moveNumber + 1)}`',
+  },
+  {
+    id: 'M68',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'never sweep the position after the last move (off-by-one resume)',
+    from: '  for (let move = 0; move <= ledger.moveCount; move += 1) {',
+    to: '  for (let move = 0; move < ledger.moveCount; move += 1) {',
+  },
+  {
+    id: 'M69',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'raise the fixed sweep visit cap toward the focus default',
+    from: 'export const SWEEP_MAX_VISITS = 100',
+    to: 'export const SWEEP_MAX_VISITS = 500',
+  },
+  {
+    id: 'M70',
+    file: 'apps/desktop/src/main/katago/sweep.ts',
+    what: 'halve the sweep concurrency window',
+    from: 'export const SWEEP_CONCURRENCY = 8',
+    to: 'export const SWEEP_CONCURRENCY = 4',
+  },
+  // --- session.ts: the sweep mechanics (concurrency, prefix, resume, tiers) ---
+  {
+    id: 'M71',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'ask the engine for ownership on sweep queries',
+    from: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,',
+    to: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: true,',
+  },
+  {
+    id: 'M72',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'subscribe sweep queries to streaming reports',
+    from: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n  }',
+    to: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n    reportDuringSearchEvery: 0.1,\n  }',
+  },
+  {
+    id: 'M73',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'sweep at the focus visit cap instead of the fixed one',
+    from: '    maxVisits: SWEEP_MAX_VISITS,',
+    to: '    maxVisits: 500,',
+  },
+  {
+    id: 'M74',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'emit partial sweep ticks instead of dropping them',
+    from: "          log.debug('dropping partial sweep tick', { id: wireId })\n          return\n        }",
+    to: "          log.debug('dropping partial sweep tick', { id: wireId })\n        }",
+  },
+  {
+    id: 'M75',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 're-issue malformed sweep moves forever (skip the failed mark)',
+    from: '            markSweepFailed(sweep.ledger, entry.moveNumber)\n',
+    to: '',
+  },
+  {
+    id: 'M76',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'never mark sweep completions (the ledger resume would redo finished work)',
+    from: '        markSweepComplete(sweep.ledger, entry.moveNumber)\n',
+    to: '',
+  },
+  {
+    id: 'M77',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'issue sweep queries under the focus id prefix',
+    from: '      const id = sweepQueryId(move)',
+    to: '      const id = `${FOCUS_QUERY_PREFIX}${String(move)}`',
+  },
+  {
+    id: 'M78',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'widen the sweep window past the concurrency bound',
+    from: '      sweep.inFlight.size < SWEEP_CONCURRENCY &&',
+    to: '      sweep.inFlight.size < SWEEP_CONCURRENCY + 5 &&',
+  },
+  {
+    id: 'M79',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'keep the old sweep running across setGame',
+    from: '    setGame(next, atMove) {\n      cancelHeldCursor()\n      stopSweep(true)\n',
+    to: '    setGame(next, atMove) {\n      cancelHeldCursor()\n',
+  },
+  {
+    id: 'M80',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'let a cursor move kill the sweep (the tiers must terminate independently)',
+    from: '    setCursor(moveNumber) {\n      if (game === null) {',
+    to: '    setCursor(moveNumber) {\n      stopSweep(true)\n      if (game === null) {',
+  },
+  {
+    id: 'M81',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 're-issue failed moves within the pump window (drop the failed skip)',
+    from: '      if (sweep.ledger.completed.has(move) || sweep.ledger.failed.has(move)) continue',
+    to: '      if (sweep.ledger.completed.has(move)) continue',
+  },
+  {
+    id: 'M82',
+    file: 'apps/desktop/src/main/katago/session.ts',
+    what: 'skip the perspective adaptation on sweep emissions',
+    from: '        const normalized = normalizeAnalysisResult(result, entry.player)\n        options.onResult(normalized)',
+    to: '        options.onResult(result)',
+  },
+  // --- adapter.ts: the branch projection (line following, options, density) ---
+  {
+    id: 'M83',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'consume a variationPath element at every multi-child node, not only at branch points with usable alternatives',
+    from: '    if (branchAlternatives(node, boardSize).length >= 2) {',
+    to: '    if (node.children.length >= 2) {',
+  },
+  {
+    id: 'M84',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'default an unlisted branch choice to child 1 instead of the mainline',
+    from: '      childIndex = chosen ?? 0',
+    to: '      childIndex = chosen ?? 1',
+  },
+  {
+    id: 'M85',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'accept an out-of-range variation path (truncated line instead of an error)',
+    from: '      if (!Number.isInteger(childIndex) || childIndex >= node.children.length) {',
+    to: '      if (false) {',
+  },
+  {
+    id: 'M86',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'report branch options at the departure index instead of the arrival index',
+    from: '    const index = applied + (hasMove ? 1 : 0)',
+    to: '    const index = applied',
+  },
+  {
+    id: 'M87',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'number branch options by display ordinal instead of SGF child index',
+    from: '          index: offer.childIndex,',
+    to: '          index: options.length,',
+  },
+  {
+    id: 'M88',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'drop the branch option labels',
+    from: '        const label = getComment(offer.child)',
+    to: '        const label = undefined',
+  },
+  {
+    id: 'M89',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'leave the branches array sparse (holes cross IPC as null)',
+    from: '  for (let index = 0; index < branches.length; index += 1) {\n    branches[index] ??= []\n  }',
+    to: '',
+  },
+  {
+    id: 'M90',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'count a branch alternative twice',
+    from: '      count += 1',
+    to: '      count += 2',
+  },
+  {
+    id: 'M91',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'always follow the first child (variationPath becomes a no-op)',
+    from: '    const next = node.children[childIndex]',
+    to: '    const next = node.children[0]',
+  },
+  {
+    id: 'M92',
+    file: 'apps/desktop/src/main/sgf/adapter.ts',
+    what: 'ignore the variationPath entirely in toGame',
+    from: '  const line = followLine(root, options.variationPath ?? [], meta.boardSize)',
+    to: '  const line = followLine(root, [], meta.boardSize)',
+  },
+  // --- config.ts: added with the real-engine gate (v1.18 thread model) -----
+  {
+    id: 'M93',
+    file: 'apps/desktop/src/main/katago/config.ts',
+    what: 'starve the sweep tier (round the per-position share down, not up)',
+    from: '  const threadsPerPosition = Math.max(1, Math.ceil(threads / 2))',
+    to: '  const threadsPerPosition = Math.max(1, Math.floor(threads / 2))',
+  },
+  // --- backoff.ts: added at the final gate (its header claims this coverage)
+  {
+    id: 'M94',
+    file: 'apps/desktop/src/main/katago/backoff.ts',
+    what: 'never trip the circuit breaker (restart forever against a broken driver)',
+    from: '  if (inWindow >= MAX_ATTEMPTS_PER_WINDOW) {',
+    to: '  if (inWindow >= Number.MAX_SAFE_INTEGER) {',
+  },
+  {
+    id: 'M95',
+    file: 'apps/desktop/src/main/katago/backoff.ts',
+    what: 'count expired attempts toward the breaker (the window never forgives)',
+    from: '  const inWindow = attemptTimes.filter((at) => nowMs - at < RETRY_WINDOW_MS).length',
+    to: '  const inWindow = attemptTimes.filter((at) => nowMs - at >= RETRY_WINDOW_MS).length',
+  },
 ]
 
-function run(): { total: number; failed: number; ok: boolean } {
+interface SuiteResult {
+  total: number
+  failed: number
+  ok: boolean
+}
+
+function runSuite(project: string, filter: string): SuiteResult {
+  let output: string
+  let ok: boolean
   try {
-    const out = execFileSync(
+    output = execFileSync(
       'pnpm',
-      ['vitest', 'run', '--project', 'core', 'test/katago', '--reporter', 'basic'],
-      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: true },
+      ['vitest', 'run', '--project', project, filter, '--reporter', 'basic'],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+      },
     )
-    return parse(out, true)
+    ok = true
   } catch (error) {
     const shaped = error as { stdout?: string; stderr?: string }
-    return parse((shaped.stdout ?? '') + (shaped.stderr ?? ''), false)
+    output = (shaped.stdout ?? '') + (shaped.stderr ?? '')
+    ok = false
+  }
+  const parsed = parse(output)
+  return { total: parsed.total, failed: parsed.failed, ok }
+}
+
+function run(): { total: number; failed: number; ok: boolean } {
+  // Protocol layer + the M2 lifecycle's pure modules + the SGF branch
+  // projection, summed. A mutation that breaks collection in any suite changes
+  // the total and is INVALID.
+  const core = runSuite('core', 'test/katago')
+  const desktop = runSuite('desktop', 'test/unit/katago')
+  // The branch-projection mutants (M83–M92) live in `main/sgf/adapter.ts`,
+  // which the katago suites never load — without this third run they would
+  // report "caught" against suites that never executed the mutated code.
+  const adapter = runSuite('desktop', 'test/unit/sgf-adapter')
+  return {
+    total: core.total + desktop.total + adapter.total,
+    failed: core.failed + desktop.failed + adapter.failed,
+    ok: core.ok && desktop.ok && adapter.ok,
   }
 }
 
-function parse(
-  output: string,
-  ok: boolean,
-): { total: number; failed: number; ok: boolean } {
+function parse(output: string): { total: number; failed: number } {
   const clean = output.replace(ANSI, '')
   const totalMatch =
     /Tests\s+(?:(\d+) failed \| )?(\d+) passed(?: \| (\d+) skipped)?\s+\((\d+)\)/.exec(
@@ -321,12 +781,11 @@ function parse(
   if (totalMatch === null) {
     // No summary line at all means collection failed — a syntax error, not a
     // behavioural difference. Reported as total 0 so the gate marks it INVALID.
-    return { total: 0, failed: 0, ok }
+    return { total: 0, failed: 0 }
   }
   return {
     total: Number(totalMatch[4]),
     failed: Number(totalMatch[1] ?? 0),
-    ok,
   }
 }
 

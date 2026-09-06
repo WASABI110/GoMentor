@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { gameSchema, gameSummarySchema } from './types/game'
-import { engineInfoSchema } from './types/analysis'
+import {
+  analysisResultSchema,
+  engineGameSchema,
+  engineInfoSchema,
+} from './types/analysis'
 import { chatChunkSchema, chatContextSchema, chatMessageSchema } from './types/chat'
 import { secretKeySchema, settingsPatchSchema, settingsSchema } from './types/settings'
 import { errorEnvelopeSchema } from './types/errors'
@@ -34,7 +38,20 @@ const empty = z.object({})
 
 export const CHANNELS = {
   'sgf:parse': {
-    request: z.object({ content: z.string() }),
+    request: z.object({
+      content: z.string(),
+      /**
+       * Branch navigation (`design.md` §Branch navigation): child index to
+       * follow at each branch point along the line, in walk order. A branch
+       * point is a node with at least two usable alternatives (children whose
+       * own line carries a move) — exactly the nodes `Game.branches` reports
+       * options at. Absent means the default mainline (first child at every
+       * branch). Entry `k` is the SGF child index at the `k`-th branch point
+       * on the followed line — exactly the `BranchOption.index` the picker
+       * offers, so a choice round-trips without a mapping.
+       */
+      variationPath: z.array(z.number().int().min(0)).optional(),
+    }),
     response: gameSchema,
   },
   'sgf:serialize': {
@@ -99,6 +116,58 @@ export const CHANNELS = {
     request: z.object({ key: secretKeySchema }),
     response: z.object({ present: z.boolean() }),
   },
+
+  /**
+   * Engine lifecycle. Startup is lazy: `engine:start` fires when the first game
+   * opens, not at app launch (`design.md` §Engine lifecycle), so a chat-only
+   * user never pays for a resident engine process. Both channels answer with a
+   * snapshot so a fresh mount can sync without subscribing first.
+   */
+  'engine:info': {
+    request: empty,
+    response: engineInfoSchema,
+  },
+  'engine:start': {
+    request: empty,
+    // Idempotent: calling it while `starting` joins the in-flight attempt, and
+    // calling it while `ready` is a no-op returning the snapshot. From
+    // `failed` it retries the whole start (that is the recovery path).
+    response: engineInfoSchema,
+  },
+  /**
+   * Live analysis. `game: null` closes analysis: in-flight queries are
+   * terminated, the held record is dropped, and the engine stays warm for the
+   * next open — closing a record is not an engine shutdown. The response names
+   * the focus query correlating the results for this position, or null when
+   * the engine is not ready (the service remembers the request and issues it
+   * on ready, so a slow cold start loses nothing but latency).
+   *
+   * `atMove` selects the analysed position inside the record and is ignored
+   * when `game` is null.
+   */
+  'engine:setGame': {
+    request: z.object({
+      game: engineGameSchema.nullable(),
+      atMove: z.number().int().min(0),
+    }),
+    response: z.object({ focusQueryId: z.string().nullable() }),
+  },
+  /**
+   * Cursor movement: one integer, carrying nothing else, because cursor steps
+   * resend nothing (`design.md` §IPC additions). Main debounces cursor streams
+   * ~50ms latest-wins before touching the engine — holding an arrow key must
+   * not queue 200 queries — and supersedes the prior in-flight focus query
+   * with a production `encodeTerminateRequest`.
+   *
+   * Design.md wrote this response's id as non-nullable; it is nullable for
+   * the same reason `setGame`'s is — with no record open there is no query to
+   * name, and the renderer only calls this with a record open. Null there
+   * means "nothing was scheduled", not an error.
+   */
+  'engine:setCursor': {
+    request: z.object({ moveNumber: z.number().int().min(0) }),
+    response: z.object({ focusQueryId: z.string().nullable() }),
+  },
 } as const
 
 export type Channels = typeof CHANNELS
@@ -136,11 +205,21 @@ export const EVENTS = {
   'menu:command': z.object({ command: z.enum(['openSgf']) }),
 
   /**
-   * Engine lifecycle transitions. M1 only ever emits 'unavailable'.
-   * M2 will coalesce high-frequency analysis ticks to ~20/s before sending —
-   * engines emit far faster than a UI can usefully paint.
+   * Engine lifecycle transitions. Startup is lazy (`engine:start` on first
+   * game open), so a user who only chats never pays for a resident engine.
    */
   'engine:status': engineInfoSchema,
+
+  /**
+   * One analysis tick, coalesced per query to ≤20/s in main before sending —
+   * engines emit far faster than a UI can usefully paint, and flooding IPC is
+   * a known Electron cliff. The payload is the shared `AnalysisResult`
+   * verbatim (`queryId` namespaces it: `focus:<n>` now, `sweep:<move>` in
+   * Stage 4); the renderer routes by prefix and filters by `gameId` +
+   * `moveNumber`, so a late tick from a since-closed game or a superseded
+   * cursor position never reaches the screen.
+   */
+  'engine:analysis': analysisResultSchema,
 } as const
 
 export type Events = typeof EVENTS

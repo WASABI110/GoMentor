@@ -122,6 +122,28 @@ Whether a secret is present: `{ present: boolean }`.
 
 **A boolean is the entire renderer-visible surface of every secret.** There is deliberately no `settings:getSecret` — not gated, not dev-only, not "for testing". The renderer needs to render "key configured ✓" and to enable a button; both are decidable from a boolean. A channel that returned the value would put every stored credential one `page.evaluate` away.
 
+### `engine:info`
+
+The engine's lifecycle state, synchronously: `engineInfoSchema` — the same snapshot that [`engine:status`](#enginestatus) pushes. A renderer that mounts after an emission has not missed anything; it asks.
+
+The response is a state, not a verdict: `status` is `unavailable | starting | ready | failed`, and only `failed` carries an `errorCode`. `unavailable` is an ordinary condition — no engine on this platform (macOS has no official KataGo build), or the fetch scripts have not been run in dev — and every feature must work in it.
+
+### `engine:start`
+
+Starts the engine lazily and returns the resulting snapshot. Idempotent by design: from `ready` it returns immediately, an in-flight start is joined rather than duplicated (the engine is a single expensive child process, and two competing spawns would race on the same config file), and from `failed` / `unavailable` it runs the full sequence — locate, write config, spawn, probe.
+
+Readiness is **proven, not declared**: the returned `ready` means a real `maxVisits: 1` analysis query round-tripped through the production parser inside a deadline. Analysis mode has no handshake, so an answer the parser accepts is the only honest "up". A timeout or a malformed answer is `failed` with `ENGINE_START_TIMEOUT` / `ENGINE_QUERY_FAILED`; a missing binary in a packaged build is `ENGINE_BINARY_MISSING`, while in dev the same fact degrades to `unavailable` with a log line naming the fetch command.
+
+### `engine:setGame`
+
+Holds (or, with `game: null`, clears) the record under analysis: `{ game: engineGameSchema | null, atMove }`. The game is **self-contained** — the engine service must not import the library store, so the renderer resends the record (~2KB for 300 moves) rather than referencing an id. `rules` is the raw SGF `RU` string; mapping it onto a KataGo ruleset is main's job, with unknown values falling back to `chinese` there, not here.
+
+The response names the focus query the open produces — `{ focusQueryId }`, or `null` when nothing was issued yet. Requests sent while the engine starts are held and issued the moment readiness is proven, so a slow cold start loses nothing but latency; closing a record (`game: null`) is not an engine shutdown.
+
+### `engine:setCursor`
+
+Moves the analysis cursor: `{ moveNumber }` → `{ focusQueryId | null }`. Latest-wins debounced in main (~50ms): holding an arrow key fires dozens of cursor steps and each must not become an engine query, and every new focus query supersedes the prior in-flight one with a production `encodeTerminateRequest`. `focusQueryId` is allocated eagerly, so the response names the query the results will correlate against; `null` means no record is held.
+
 ## Events
 
 Main → renderer, one-way. Payload schemas are `EVENTS` in [`ipc.ts:116`](../packages/shared/src/ipc.ts#L116).
@@ -162,11 +184,15 @@ There is no `menu:setLabels`. Menu labels are localised in main, which reads the
 
 ### `engine:status`
 
-`engineInfoSchema` — the engine's lifecycle state, not analysis results.
+`engineInfoSchema` — the engine's lifecycle state, not analysis results. Emitted on every **actual** transition (`unavailable → starting → ready | failed`), never on a no-op, so a mounted badge redraws only when something changed.
 
-**In M1 this only ever reports `unavailable`**, and every other feature must still work when it does. A build that disabled itself because no engine was found would satisfy a badge test and fail the requirement.
+A renderer that subscribes late asks [`engine:info`](#engineinfo) rather than waiting for the next emission — start is lazy (first game open) and may be minutes away, and the UI must show real state in the meantime.
 
-M2 will coalesce analysis ticks to roughly 20/s before sending. Engines emit far faster than a UI can usefully paint, and forwarding every tick makes the renderer the bottleneck.
+### `engine:analysis`
+
+One analysis tick: `analysisResultSchema` — the winrate/score readout, ranked candidates with principal variations, and (when enabled) the per-point ownership array. `scoreLead` and ownership are **positive-favours-black**; `winrate` is from the side to move's perspective (`player`).
+
+Coalesced per query to ≤20/s in main before sending: KataGo streams partial results far faster than a UI paints, and flooding IPC is a known Electron cliff. `queryId` namespaces the query — `focus:<n>` for the position under the cursor, `sweep:<move>` for the whole-record background sweep — and the payload carries `gameId` + `moveNumber` so the renderer can refuse a late tick from a since-closed game or a superseded cursor — stale results must never paint over the board.
 
 ## Adding a channel
 

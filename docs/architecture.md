@@ -1,16 +1,16 @@
 # Architecture
 
-How GoMentor is actually built, as of M1.
+How GoMentor is actually built, as of M2.
 
 This is the living document. The planning artifacts under `.trellis/` are frozen at plan time and record _why_ decisions were made; this file records what the code does now, and it is the one to change when the code changes. Where the two disagree, the code is right and this file is stale — say so in the same commit that causes it.
 
 Two related documents: [`ipc-contract.md`](./ipc-contract.md) for the process boundary in detail, and [`adr/`](./adr/) for the decisions that are expensive to revisit.
 
-## What M1 is
+## What M2 is
 
-A desktop Go study application: open SGF files, step through games, and talk to an LLM teacher about the position. No analysis engine, no database, no accounts.
+A desktop Go study application: open SGF files, step through games, read live KataGo analysis of the position — winrate, candidate moves with principal variations, per-point ownership, a whole-record winrate graph — and talk to an LLM teacher about it. No database, no accounts.
 
-The engine's absence is a _state_, not a missing feature. `engine:status` reports `unavailable` for the whole of M1, every other feature works while it does, and M2 adds the engine without touching UI control flow. A build that disabled itself for lack of KataGo would pass a badge test and fail the requirement.
+The engine is real now: a bundled KataGo (Eigen CPU build, one small net) is fetched at build time, packaged outside the asar, and spawned lazily by main when the first game opens. Absence survives as a _state_ regardless, because it still happens — macOS (no official KataGo binary is published for it), a dev checkout that has not run `pnpm fetch:katago`, and an engine past its restart budget all report `unavailable` or `failed`, and every other feature works in each. That is the M1 invariant, kept rather than retired: a build that disabled itself for lack of KataGo would pass a badge test and fail the requirement.
 
 ## Three processes
 
@@ -25,10 +25,11 @@ The engine's absence is a _state_, not a missing feature. `engine:status` report
 │  logger.ts       electron-log + redact.ts serializer         │
 │  settings.ts     zod-validated document on disk              │
 │  safe-storage.ts OS keychain; refuses plaintext fallback     │
-│  telemetry.ts    no-op in M1, call sites already stable      │
-│  ipc/            register.ts (zod gate) + 4 handler modules  │
+│  telemetry.ts    no-op until consent, call sites stable      │
+│  ipc/            register.ts (zod gate) + 5 handler modules  │
+│  katago/         engine lifecycle: locate, probe, recover    │
 │  llm/service.ts  run lifecycle, streams over events          │
-│  library/store.ts in-memory Map (no SQLite in M1)            │
+│  library/store.ts in-memory Map (no SQLite yet)              │
 │  sgf/adapter.ts  bridges core's parser to the handlers       │
 └───────────────▲───────────────────────────┬──────────────────┘
                 │ invoke                    │ typed events
@@ -43,9 +44,19 @@ The engine's absence is a _state_, not a missing feature. `engine:status` report
 │  App.tsx                three-panel shell                    │
 │  panels/                Board · Library · Teacher            │
 │  hooks/useIpcEvent      one subscription primitive           │
-│  hooks/useMainProcessEvents  all four event subscriptions    │
-│  state/                 4 zustand stores                     │
+│  hooks/useMainProcessEvents  all seven event subscriptions   │
+│  state/                 5 zustand stores                     │
 │  i18n/                  en + zh-CN                           │
+└──────────────────────────────────────────────────────────────┘
+
+MAIN also spawns one child process of its own — KataGo, reached by stdin/stdout
+newline-JSON, whose exit events main handles:
+
+┌──────────────────────────────────────────────────────────────┐
+│ KATAGO — child process, bundled outside the asar             │
+│  Eigen CPU build + one small net, win32-x64 and linux-x64    │
+│  only. macOS has nothing bundled and main reports            │
+│  `unavailable` there by construction.                        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +68,7 @@ Note one consequence that catches people: a sandboxed preload cannot be an ES mo
 
 Renderer → main is **always** `invoke`. Main → renderer is **always** an event. The asymmetry is not stylistic: a token stream has no length at call time, so `invoke` cannot model it, and a notification nobody requested has no call to attach to.
 
-M1 streams LLM token deltas. M2 adds analysis ticks, **coalesced in main to ~20/s** — engines emit far faster than a UI can usefully paint, and flooding IPC is a known Electron performance cliff.
+Two things stream today: LLM token deltas and analysis ticks. The ticks are **coalesced in main to ≤20/s per query** ([`katago/coalesce.ts`](../apps/desktop/src/main/katago/coalesce.ts)) — the engine emits partial results far faster than a UI can usefully paint, and flooding IPC is a known Electron performance cliff. Latest-wins is the correct drop policy there: each tick is a snapshot of the same search, so the only one worth its IPC cost is the newest. A `complete` tick bypasses the window, because it is the settled verdict rather than a snapshot.
 
 Full channel reference: [`ipc-contract.md`](./ipc-contract.md).
 
@@ -76,7 +87,7 @@ Enforced by `no-restricted-imports` in [`eslint.config.js`](../eslint.config.js)
 
 **`core` is Electron-free**, which is what makes it unit-testable without spawning Electron and reusable by the website's interactive demos. It holds the SGF parser and serializer, board rules and coordinates, the LLM provider, and the KataGo protocol codecs.
 
-**`core/katago/{gtp,analysis}.ts` exist in M1 with no process management** — pure encoders and decoders. Writing the protocol layer before the process layer confines M2's risk to process lifecycle rather than to protocol correctness, which is the harder thing to debug against a real engine.
+**`core/katago/{gtp,analysis}.ts` are pure encoders and decoders, and still know nothing of processes.** The protocol layer was written before any process existed to speak it, which is what confined the engine work to lifecycle — spawn, framing, recovery — rather than to protocol correctness, the harder thing to debug against a real engine. [`main/katago/`](../apps/desktop/src/main/katago/service.ts) consumes these codecs and adds everything with a pid.
 
 ## SGF
 
@@ -85,7 +96,7 @@ SGF bytes ──parser──► GameTree AST (values kept RAW)
                         │
      ┌──────────────────┼──────────────────┐
      ▼                  ▼                  ▼
-board/position     library store      (M2: DB rows)
+board/position     library store      (M4: DB rows)
 (replay to move N)  (metadata)
      │
      ▼
@@ -99,6 +110,8 @@ Hand-written rather than wrapping a library, for one reason that turned out to b
 Failure modes are typed and distinct — `SGF_TRUNCATED`, `SGF_EMPTY`, `SGF_NOT_SGF`, `SGF_INVALID_PROPERTY`, `SGF_UNSUPPORTED_BOARD_SIZE`, `SGF_TOO_DEEP` — because each has a different remedy to offer the user. The parser must also never hang on malformed input; a hang freezes the import flow with no recovery path.
 
 `SGF_UNSUPPORTED_ENCODING` is the one write-side code: `TextEncoder` emits only UTF-8, so a file that arrived in a legacy codepage cannot be re-encoded back to it.
+
+**The renderer sees a projection; the AST stays in main.** `sgf:parse` follows one line through the tree — the mainline, or a chosen branch via the optional `variationPath` — and reports, per mainline move, what the alternatives are ([`Game.branches`](../apps/desktop/src/main/sgf/adapter.ts)). Navigating a variation re-parses with a new path rather than shipping a second tree structure to the renderer, so the invariant that exactly one thing produces a `Game` survived M2's branch navigation instead of being paid for it.
 
 ## Coordinates
 
@@ -116,18 +129,63 @@ Historically this is where Go software bugs live, the GTP `I`-skip above all. He
 
 ## Board rendering
 
-**Designed, not yet built.** [`panels/BoardPanel.tsx`](../apps/desktop/src/renderer/src/panels/BoardPanel.tsx) is the shell; `components/Board.tsx` does not exist yet. Recorded here so the plan is visible, and marked so nobody reads it as shipped.
+[`panels/BoardPanel.tsx`](../apps/desktop/src/renderer/src/panels/BoardPanel.tsx) is the shell; [`components/Board.tsx`](../apps/desktop/src/renderer/src/components/Board.tsx) renders it: two stacked canvases, both sized to `devicePixelRatio`.
 
-Two stacked canvases, both sized to `devicePixelRatio`:
+| Layer   | Contents                                                                     | Redraws on   |
+| ------- | ---------------------------------------------------------------------------- | ------------ |
+| Static  | wood, grid, star points, coordinate labels                                   | resize only  |
+| Dynamic | stones, last-move marker, hover ghost, capture animations, analysis overlays | state change |
 
-| Layer   | Contents                                                       | Redraws on   |
-| ------- | -------------------------------------------------------------- | ------------ |
-| Static  | wood, grid, star points, coordinate labels                     | resize only  |
-| Dynamic | stones, last-move marker, (M2: heatmap, ownership, candidates) | state change |
+Splitting them is what makes the per-tick analysis overlays affordable: the expensive static content is painted once per resize, not once per analysis tick.
 
-Splitting them is what makes M2's per-frame overlays affordable: the expensive static content is painted once per resize, not once per analysis tick.
+The dynamic layer's **draw order is load-bearing**: ownership fill under the stones (a tinted stone is still a stone), then stones, last-move marker, candidate letters, PV ghost stones, hover ghost on top. Candidates drawn beneath the stones would vanish on occupied points — which is where most candidates are, late in a game.
+
+M1 planned a third DOM/SVG overlay layer for the analysis marks. They landed on the dynamic canvas instead, and [`BoardOverlay.tsx`](../apps/desktop/src/renderer/src/components/BoardOverlay.tsx) remains the empty scaffold it was: per-point ownership tints and ghost stones are canvas pixels like everything else on that layer, and a second coordinate system would have been a second place to drift. The winrate graph is the exception, and is SVG ([`WinrateGraph.tsx`](../apps/desktop/src/renderer/src/components/WinrateGraph.tsx)) — a few hundred nodes updating about once per completed position is nowhere near the per-frame load that ruled SVG out for the board, and SVG buys click-to-seek and testable geometry. Its unanalysed region renders as a hatch rather than a 50% flatline, because "the engine says even" is a result and "no data yet" is not.
 
 Animations get a ≤120ms budget via `requestAnimationFrame`, **cancellable and skippable**. Skippability is an accessibility requirement and a practical one — holding the arrow key to scan a game must not queue two hundred animations.
+
+## KataGo engine
+
+The engine is a child process owned by main, speaking KataGo's **analysis protocol** — newline-JSON on stdio — not GTP. Analysis mode answers one query with winrate, score lead, ranked candidate moves with principal variations, and the per-point ownership array in a single id-correlated response, which is the whole readout the review UI needs. GTP stays in [`core/katago/gtp.ts`](../packages/core/src/katago/gtp.ts), exercised by the test fakes, for third-party engines and a future play-vs-engine mode; no product code path issues a GTP command today.
+
+[`main/katago/`](../apps/desktop/src/main/katago/service.ts) is split the same way `core` is — decisions pure, side effects thin:
+
+| Module                                                                                                                                                                                                   | Owns                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`locate.ts`](../apps/desktop/src/main/katago/locate.ts)                                                                                                                                                 | binary/weights resolution: `GOMENTOR_KATAGO_BINARY` override, packaged layout, dev layout |
+| [`config.ts`](../apps/desktop/src/main/katago/config.ts)                                                                                                                                                 | the analysis config string, rewritten under userData at each start                        |
+| [`process.ts`](../apps/desktop/src/main/katago/process.ts)                                                                                                                                               | spawn, stdio framing (the production `splitJsonLines`), stderr capture, shutdown          |
+| [`session.ts`](../apps/desktop/src/main/katago/session.ts)                                                                                                                                               | query mechanics: ids, in-flight routing, terminate-on-supersede, the sweep driver         |
+| [`sweep.ts`](../apps/desktop/src/main/katago/sweep.ts)                                                                                                                                                   | the whole-record ledger: what completed, what to query next                               |
+| [`coalesce.ts`](../apps/desktop/src/main/katago/coalesce.ts)                                                                                                                                             | the ≤20/s latest-wins ceiling on `engine:analysis`                                        |
+| [`perspective.ts`](../apps/desktop/src/main/katago/perspective.ts)                                                                                                                                       | the one place KataGo's values are adapted onto the shared contract                        |
+| [`backoff.ts`](../apps/desktop/src/main/katago/backoff.ts) / [`state-machine.ts`](../apps/desktop/src/main/katago/state-machine.ts) / [`ring-buffer.ts`](../apps/desktop/src/main/katago/ring-buffer.ts) | restart arithmetic, the transition table, the bounded stderr tail                         |
+| [`service.ts`](../apps/desktop/src/main/katago/service.ts)                                                                                                                                               | the lifecycle owner: status, readiness probe, recovery, IPC answers                       |
+
+The pure modules in that table are unit-tested and mutation-covered (`scripts/mutate-katago.mts`), because pure is the shape that can be proven and lifecycle is not.
+
+**Readiness is proven, not declared.** Analysis mode has no handshake, so `engine:start` answers `ready` only after a `maxVisits: 1` probe has round-tripped through the production parser inside a deadline; a stderr banner is not a protocol. Startup is lazy — nothing runs at app launch, `engine:start` fires on the first game open, and a user who only talks to the teacher never pays for a resident engine. `backend` reports `eigen` because that is what is bundled, not a measurement, and `visitsPerSecond` is left unpopulated rather than invented — tier-2's probe-each-backend benchmark machinery is deferred, and a measured number waits for it.
+
+**Missing is two different states, deliberately.** In a packaged build a missing binary is a packaging defect → `failed` with `ENGINE_BINARY_MISSING`; a build promising zero-config must not degrade silently. In dev the same fact means `pnpm fetch:katago` has not been run → `unavailable`, with a log line naming the command. On macOS there is no official KataGo binary to bundle, so there is no darwin entry in the manifest and `unavailable` is the honest state by construction.
+
+**Perspective is pinned, not inherited.** KataGo's reported perspective is config-dependent, while the shared contract wants `winrate` side-to-move and `scoreLead`/ownership positive-favours-black. `config.ts` pins `reportAnalysisWinratesAs = SIDETOMOVE` with no parameter to change it, and `perspective.ts` negates scoreLead and ownership when White is to move — `winrate` is spelled out as an explicit identity there, because "no flip needed" is itself a decision someone could wrongly optimise away. Left to defaults this is a silent sign error rendering plausible wrong numbers, the exact class of bug a green suite does not catch.
+
+### Two tiers of query
+
+| Tier  | Trigger                               | Feeds                                                                   |
+| ----- | ------------------------------------- | ----------------------------------------------------------------------- |
+| Focus | `engine:setGame` / `engine:setCursor` | candidates, PV hover, ownership overlay, the current readout            |
+| Sweep | `engine:setGame`, once per record     | the winrate graph, one settled point per position, filled progressively |
+
+They run **concurrently** — KataGo time-slices threads between them — because a strict queue freezes the graph exactly when the user lingers on a position, which is the common case. Query ids are namespaced `focus:<n>` and `sweep:<move>`, and the renderer routes on the prefix. A new focus query terminates the in-flight one, and cursor streams are debounced ~50ms latest-wins, so holding an arrow key cannot queue two hundred engine queries. Sweep queries carry no ownership and only their final `complete` tick feeds the graph: an ownership tensor per move would roughly double sweep cost for pixels nobody renders.
+
+### Crash recovery
+
+While queries are in flight, stdout silence beyond a 30s watchdog trips terminate-all → grace → `SIGKILL`, and that exit feeds the same path as any unexpected death. That path respawns with 1s/2s/4s backoff; three crashes inside 60s exhaust the breaker and land on `failed(ENGINE_CRASHED)` — restarting forever against a broken machine burns the user's CPU. The breaker does not latch: a user-issued `engine:start` clears the window and retries. The sweep ledger lives in the service and outlives the process, so a respawned engine resumes at the first move that never completed, and the focus query for the current cursor is re-issued. The renderer takes no part in recovery beyond rendering status. On app quit the child gets terminate → grace → `SIGKILL`, plus a synchronous kill in `process.on('exit')` — a spawned engine must never outlive the app.
+
+### How the renderer consumes it
+
+[`analysisStore`](../apps/desktop/src/renderer/src/state/analysisStore.ts) holds the engine snapshot, the newest focus result, and the sweep map; everything the board shows is derived from those at render. It applies its own stale-result filters beside the ones main already applies — query-id prefix, and a `gameId` + cursor expectation that `gameStore` sets on every open and step — so a late tick from a since-closed game or a superseded cursor position never paints. [`gameStore`](../apps/desktop/src/renderer/src/state/gameStore.ts) drives the engine imperatively (`open` → `engine:start` + `setGame`, seek/step → `setCursor`, close → `setGame(null)`) and never waits for it: a slow or absent engine must not block opening a file.
 
 ## LLM
 
@@ -181,18 +239,19 @@ The reason is the subject matter: this tool handles a user's private study mater
 
 ## Renderer state
 
-Four zustand stores, split by **lifecycle** rather than by screen:
+Five zustand stores, split by **lifecycle** rather than by screen:
 
 | Store                                                                      | Owns                                         |
 | -------------------------------------------------------------------------- | -------------------------------------------- |
 | [`gameStore`](../apps/desktop/src/renderer/src/state/gameStore.ts)         | current game, cursor, derived board position |
 | [`chatStore`](../apps/desktop/src/renderer/src/state/chatStore.ts)         | messages, streaming state, active `runId`    |
+| [`analysisStore`](../apps/desktop/src/renderer/src/state/analysisStore.ts) | engine status, focus result, sweep results   |
 | [`settingsStore`](../apps/desktop/src/renderer/src/state/settingsStore.ts) | mirror of persisted settings                 |
 | [`libraryStore`](../apps/desktop/src/renderer/src/state/libraryStore.ts)   | game list, import status                     |
 
 zustand over Redux (too much ceremony at this size) and over Jotai (atom sprawl once imperative code reads state). The deciding factor: the canvas renderer and the IPC event handlers both need `getState()` from **outside React**, which zustand does natively.
 
-All four main→renderer subscriptions live in one place, [`useMainProcessEvents.ts`](../apps/desktop/src/renderer/src/hooks/useMainProcessEvents.ts), on top of a single [`useIpcEvent`](../apps/desktop/src/renderer/src/hooks/useIpcEvent.ts) primitive.
+All seven main→renderer subscriptions live in one place, [`useMainProcessEvents.ts`](../apps/desktop/src/renderer/src/hooks/useMainProcessEvents.ts), on top of a single [`useIpcEvent`](../apps/desktop/src/renderer/src/hooks/useIpcEvent.ts) primitive.
 
 Two facts about that hook worth knowing before you change it, both established by measurement rather than argument:
 
@@ -211,13 +270,13 @@ There is a mechanical reason this is data rather than a throw: `contextBridge` c
 
 ## Operational
 
-- **Single-instance lock** in [`index.ts:52`](../apps/desktop/src/main/index.ts#L52). Two instances would fight over settings, the log file, and later SQLite and the GPU.
-- **`paths.ts` is the single source of truth** for userData, resources, logs, and library roots. Scattered `path.join(app.getPath(...))` calls are how cross-platform path bugs get in.
+- **Single-instance lock** in [`index.ts:54`](../apps/desktop/src/main/index.ts#L54). Two instances would fight over settings, the log file, the engine's CPU threads, and later SQLite.
+- **`paths.ts` is the single source of truth** for userData, resources, logs, library roots, and the engine's binary, weights, and generated config paths. Scattered `path.join(app.getPath(...))` calls are how cross-platform path bugs get in.
 - **Window bounds** are persisted and restored with an on-screen validity check, so a window never restores off-screen after a monitor change.
-- **Logging** is `electron-log`, file plus console with rotation, wrapped to enforce `{ level, ts, scope, msg, ...fields }`. Renderer logs forward to main. A "Reveal logs" menu item ships in M1 — it is the highest-value support affordance there is.
+- **Logging** is `electron-log`, file plus console with rotation, wrapped to enforce `{ level, ts, scope, msg, ...fields }`. Renderer logs forward to main. A "Reveal logs" menu item ships from M1 — it is the highest-value support affordance there is. Engine stderr is chatty enough to drown everything, so it is throttled through a bounded ring buffer ([`katago/ring-buffer.ts`](../apps/desktop/src/main/katago/ring-buffer.ts)) at debug; when the process dies unexpectedly the whole tail is dumped at warn, so a `failed` status carries the engine's own last words.
 - **Telemetry** is opt-in, default off, and a **no-op until consented** — no network call whatsoever before consent. When enabled: crashes only, never gameplay content, SGF, chat text, or prompts. The wiring lands in M5; [`telemetry.ts`](../apps/desktop/src/main/telemetry.ts) exists now so call sites are stable.
-- **No SQLite in M1**, deliberately. The library is an in-memory `Map` ([`library/store.ts:47`](../apps/desktop/src/main/library/store.ts#L47)), which keeps `better-sqlite3`'s native-rebuild variable out of an already-risky toolchain bring-up. M2 adds it when there is analysis data worth persisting.
-- **Rollback** is reinstall: M1 has no persistent schema. The one migration-shaped concern is settings forward-compatibility, and it is tested — unknown keys must survive a load→save cycle, so a user who runs a newer build and rolls back does not lose settings.
+- **Still no SQLite** — deliberately, twice over. The library is an in-memory `Map` ([`library/store.ts:47`](../apps/desktop/src/main/library/store.ts#L47)), which keeps `better-sqlite3`'s native-rebuild variable out of an already-risky toolchain bring-up, and M2's analysis results are session-memory too: re-analysing a position is seconds on the CPU tier, which does not yet justify a native dependency. M4's batch analysis is what actually forces persistence.
+- **Rollback** is reinstall: M2 still has no persistent schema. The one migration-shaped concern is settings forward-compatibility, and it is tested — unknown keys must survive a load→save cycle, so a user who runs a newer build and rolls back does not lose settings.
 
 ## Packaging
 
@@ -225,23 +284,32 @@ electron-builder, configured in [`electron-builder.yml`](../apps/desktop/electro
 
 `electronVersion` is **pinned exactly**, and the comment in that file explains why at length. Short version: `.npmrc` sets `node-linker=hoisted`, so Electron resolves at the repository root while electron-builder looks under `apps/desktop`, and a caret range leaves it nothing to fall back on. Keep it in step with the `electron` devDependency.
 
-KataGo binaries and weights ship **outside the asar** via `extraResources`, so the engine can be spawned as a child process and so update blockmaps stay effective at 120MB+. The directories are empty in M1 — the structure exists now so M2 is purely additive. `scripts/fetch-katago.ts` and `scripts/fetch-weights.ts` are the stubs that will fill them.
+KataGo binaries and weights ship **outside the asar** via `extraResources`, so the engine can be spawned as a child process and so update blockmaps stay effective at 120MB+. They are filled by `pnpm fetch:katago` / `pnpm fetch:weights` — real fetchers now, governed by [`scripts/katago-manifest.ts`](../scripts/katago-manifest.ts), the single pinned source: engine v1.18.1 (the latest KataGo release with Eigen CPU builds) and the kata1-b6c96 net, CC0, 5.0MB — benchmark-swapped down from the originally recommended b10c128, whose 500-visit reads measured at ~8s on the reference CPU against b6c96's ~3.4s (the recorded stronger-but-slower alternative stays in the manifest). Three facts about that pipeline are worth knowing before touching it:
+
+- **Checksums are trust-on-first-use, and the sidecar is committed.** Neither KataGo releases nor katagotraining.org publish hashes, so the first completed download records the observed sha256 into [`scripts/katago-checksums.json`](../scripts/katago-checksums.json) and every fetch after that verifies against it — a truncated or substituted payload fails loudly instead of shipping.
+- **The engine directory is per-platform, and so is the `extraResources` entry.** `win.extraResources` copies `resources/katago/win32-x64/` and `linux.extraResources` copies `linux-x64/`; knowledge and weights are platform-independent and ride in the top-level block. There is deliberately no engine entry under `mac` (no macOS binaries are published), and copying every platform into every installer would triple the tier silently. The fetch cache (`*.zip`, `*.partial`) is excluded by filter — the archive alone roughly doubles the tier, and an interrupted partial is resume state, not payload.
+- **Two extraction quirks are load-bearing.** The Windows build dynamically links the MSVC runtime, so the fetcher flattens the archive — engine and DLLs side by side, no installer prerequisite. The official Linux build is an AppImage _inside_ the release zip, so it is extracted twice (zip, then `--appimage-extract`) down to a plain ELF — a nested AppImage has no FUSE in the packaged context and would not run.
+
+[`NOTICE`](../NOTICE) names both bundled payloads, and [`katago-provenance.test.ts`](../scripts/test/katago-provenance.test.ts) anchors that assertion to the manifest: they are not npm packages, so `check:licenses` never sees them, and the largest binaries in the installer would otherwise be the only shipped code with no provenance record. The same test probes every manifest URL live (`Range: 0-0`, skipped offline) — no URL ships on inference.
 
 ## Testing
 
 The technique per layer is chosen against a specific failure mode, not by habit.
 
-| Layer          | Technique                                                       | Why this one                                                                                       |
-| -------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| SGF round-trip | Fixture corpus of real-world files                              | Real malformation is not something you invent; it has to come from actual files                    |
-| Coordinates    | Property-based (`fast-check`)                                   | The bug space is all points × all sizes; examples miss the `I`-skip                                |
-| Board rules    | Hand-built positions                                            | Capture, suicide, ko, multi-group capture are specific known-hard cases                            |
-| LLM provider   | Real HTTP server (`node:http`)                                  | Must assert chunk _assembly order_ and mid-stream abort, which a mocked SDK object cannot exercise |
-| IPC schemas    | Table-driven + meta-test                                        | The meta-test is what stops an untested channel being added later                                  |
-| KataGo process | **Real spawned child** speaking GTP                             | Exercises actual pipes, framing, and exit handling. Mocks would test the mock                      |
-| Handlers       | Stubbed `ipcMain`, invoke each channel, validate against schema | Catches handler/schema drift without a UI                                                          |
-| Settings       | Write → restart-simulate → read, plus unknown-key survival      | Forward-compat is a correctness property                                                           |
-| App shell      | Playwright `_electron` against `out/` + a manual checklist      | Some of it — visual board correctness, key absence from logs — is genuinely human-verified         |
+| Layer                  | Technique                                                                     | Why this one                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| SGF round-trip         | Fixture corpus of real-world files                                            | Real malformation is not something you invent; it has to come from actual files                                             |
+| Coordinates            | Property-based (`fast-check`)                                                 | The bug space is all points × all sizes; examples miss the `I`-skip                                                         |
+| Board rules            | Hand-built positions                                                          | Capture, suicide, ko, multi-group capture are specific known-hard cases                                                     |
+| LLM provider           | Real HTTP server (`node:http`)                                                | Must assert chunk _assembly order_ and mid-stream abort, which a mocked SDK object cannot exercise                          |
+| IPC schemas            | Table-driven + meta-test                                                      | The meta-test is what stops an untested channel being added later                                                           |
+| KataGo process         | **Real spawned child** speaking GTP and the analysis protocol                 | Exercises actual pipes, framing, and exit handling. Mocks would test the mock                                               |
+| Engine lifecycle       | The same fake with fault flags (`--crash-after`, `--hang-on`, `--garbage-on`) | Recovery is only real against a child that can die, hang, or emit garbage on cue                                            |
+| Engine decision cores  | Unit + mutation harness (`scripts/mutate-katago.mts`)                         | Coalescer, sweep ledger, backoff, state machine, perspective flip — the sign-and-bound class a green suite otherwise misses |
+| Live analysis pipeline | e2e against `out/` with the fake selected via `GOMENTOR_KATAGO_BINARY`        | The whole pipe — spawn, probe, query, render — with no real engine, which a CI runner cannot have                           |
+| Handlers               | Stubbed `ipcMain`, invoke each channel, validate against schema               | Catches handler/schema drift without a UI                                                                                   |
+| Settings               | Write → restart-simulate → read, plus unknown-key survival                    | Forward-compat is a correctness property                                                                                    |
+| App shell              | Playwright `_electron` against `out/` + a manual checklist                    | Some of it — visual board correctness, key absence from logs — is genuinely human-verified                                  |
 
 Run tests from the **repository root**, never by `cd`-ing into a package.
 
@@ -261,6 +329,8 @@ Each of these is here because it already happened, and each cost real time to fi
 ### CI gates beyond the suite
 
 Lockfile drift, dependency-license compatibility with GPL-3.0, i18n key completeness against `en`, and the Trellis-immutability guard. The license gate exists because one incompatible transitive dependency is a legal problem, and commit time is the cheapest place to discover it.
+
+Since M2 the matrix also fetches the KataGo engine and net, cached under a key derived from the manifest's own hash — content-addressed, so bumping the pinned version invalidates the cache while an unrelated commit reuses it. macOS's fetch is a documented no-op (no asset exists) that exits 0; on Windows and Linux a failed fetch stops the job, because a zero exit must mean "present and verified", never "silently skipped".
 
 ## Coexistence with Trellis
 

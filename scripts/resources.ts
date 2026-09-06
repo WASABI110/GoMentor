@@ -31,7 +31,6 @@
  * ends in a `*` rather than a slash, and `scripts/test/resources.test.ts` asks
  * `git ls-files` rather than the filesystem.
  */
-import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 /** Repository root, from `scripts/`. */
@@ -59,13 +58,20 @@ export interface ResourceTarget {
 export const RESOURCE_TARGETS: readonly ResourceTarget[] = [
   {
     dir: 'katago',
-    holds: 'the KataGo executable and its OpenCL/CUDA/Eigen backends',
-    size: '~30-80MB depending on backend',
+    // M2 reality (was "OpenCL/CUDA/Eigen backends" from the M1 plan): the core
+    // tier bundles the Eigen CPU build only, per-platform under
+    // `<platform>-<arch>/` subdirectories (scope decision 1).
+    holds: 'the KataGo Eigen CPU executable, per-platform under <platform>-<arch>/',
+    size: '~6MB (win exe) / ~40MB (linux AppImage payload)',
   },
   {
     dir: 'weights',
-    holds: 'one or more KataGo neural network files (.bin.gz)',
-    size: '~30MB (b18) to ~500MB (b28)',
+    // The bundled net is the final g170 b6c96 in the legacy text format
+    // (`.txt.gz`) — see research/katago-networks.md and katago-manifest.ts.
+    // Swapped from b10c128 by the benchmark gate; b10c128 (bigger, stronger,
+    // slower) is the recorded alternative.
+    holds: 'the bundled KataGo neural network (b6c96 g170 final, .txt.gz)',
+    size: '~5MB',
   },
   {
     dir: 'knowledge',
@@ -76,51 +82,4 @@ export const RESOURCE_TARGETS: readonly ResourceTarget[] = [
 
 export function resourceDir(dir: string): string {
   return join(RESOURCES_ROOT, dir)
-}
-
-/**
- * Reports the stub's status and returns the exit code the script should use.
- *
- * ## Why this fails rather than succeeding quietly
- *
- * A stub that exits 0 tells its caller the resource is present. `pnpm package`
- * would then produce an installer with no engine in it and no indication that
- * anything was missing — which is precisely the failure mode the packaging note
- * above already caused once. So the contract is: this command exits non-zero
- * until it can actually deliver the binary. A caller wiring it into a pipeline
- * gets a loud stop, not a build that looks finished.
- *
- * It prints the destination and whether it exists, because "not implemented" on
- * its own leaves the reader unsure whether the directory question is also
- * unresolved.
- */
-export function reportStub(target: ResourceTarget, milestone = 'M2'): number {
-  const dir = resourceDir(target.dir)
-  const present = existsSync(dir)
-
-  console.error(`fetch-${target.dir}: not implemented until ${milestone}.`)
-  console.error('')
-  console.error(`  Destination : ${dir}`)
-  console.error(`  Status      : ${present ? 'exists (empty of payload)' : 'MISSING'}`)
-  console.error(`  Will hold   : ${target.holds}`)
-  console.error(`  Size        : ${target.size}`)
-  console.error('')
-
-  if (!present) {
-    // Worth separating: a missing directory is a packaging defect right now,
-    // independent of the download being unimplemented. `extraResources` skips a
-    // missing `from` without warning.
-    console.error(
-      '  The directory is absent, so electron-builder will silently copy nothing',
-    )
-    console.error(
-      '  for it. Restore it with a README.md inside — see scripts/resources.ts.',
-    )
-    console.error('')
-  }
-
-  console.error(`Exiting non-zero on purpose: nothing was downloaded, and a zero exit`)
-  console.error(`here would let a build report success while shipping no engine.`)
-
-  return 1
 }
