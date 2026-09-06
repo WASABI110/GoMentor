@@ -42,3 +42,27 @@ Closed out M2's final gate. Updated `docs/architecture.md` to M2 reality (last S
 ### Status
 
 [OK] **Completed** (linux/darwin B1 halves + CI green validate on next push)
+
+
+## Session 2: M2 final gate: real-engine benchmark, net swap, packaged launch gates green on all three OS
+
+**Date**: 2026-09-06
+**Task**: M2 final gate: real-engine benchmark, net swap, packaged launch gates green on all three OS
+**Branch**: `master`
+
+### Summary
+
+Closed M2. Real engine fetched and run for the first time: KataGo v1.18.1 requires numAnalysisThreads (fake-accepted config defect, fixed via analysisThreadSplit, mutations M38/M93). Benchmark: b10c128 8.1s/read rejected per contingency, b6c96 3.4s (148 v/s) bundled; fetch-weights prunes non-primary nets. Packaged-launch spec: win/linux assert ready + real >=450-visit readout, darwin asserts unavailable-by-construction; wired into CI for all three OS. trellis-check caught copyDir contents-vs-path packaging bug; gomentor-verify B1-B8 PASS, B9 closed by final-gate.md. CI: three runs verified, all three OS green with exactly one executed packaged gate per platform. Remaining: engine:linux-x64 sha256 environment-blocked (network resets release assets; 949eb16 makes first Linux-side fetch record it).
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b6db001` | (see git log) |
+| `2f8874a` | (see git log) |
+| `949eb16` | (see git log) |
+| `edf6443` | (see git log) |
+
+### Status
+
+[OK] **Completed**

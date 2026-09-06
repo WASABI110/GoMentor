@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-08-22
+- **Total Sessions**: 2
+- **Last Active**: 2026-09-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~30 | Active |
+| `journal-1.md` | ~68 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-09-06 | M2 final gate: real-engine benchmark, net swap, packaged launch gates green on all three OS | `b6db001`, `2f8874a`, `949eb16`, `edf6443` | `master` |
 | 1 | 2026-08-22 | Stage 6 renderer components: GameList, MoveTree, EngineStatus, SettingsPanel, theme tokens | `6f07f14`, `fb748fd`, `5847e8a` | `master` |
 <!-- @@@/auto:session-history -->
 
