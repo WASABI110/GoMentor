@@ -62,6 +62,17 @@ export const FOCUS_QUERY_PREFIX = 'focus:'
 export const SWEEP_QUERY_PREFIX = 'sweep:'
 
 /**
+ * The agent tier's prefix, reserved in M3 for the LLM tools' one-shot queries
+ * (`analyzeOnce`, `main/katago/service.ts`). Unlike focus and sweep, an agent
+ * result is **never emitted on `engine:analysis`** — it is awaited in main and
+ * handed to the model — so this prefix exists to keep the three query
+ * namespaces disjoint in one table, not for renderer routing. An `agent:<n>`
+ * id reaching the renderer is a bug, and the `agent:`/`focus:`/`sweep:`
+ * disjointness is what makes that diagnosable from the id alone.
+ */
+export const AGENT_QUERY_PREFIX = 'agent:'
+
+/**
  * The game record an analysis request carries.
  *
  * Self-contained by design (`design.md` §IPC additions): the engine service

@@ -20,6 +20,7 @@ import {
   type BoardSize,
   type BranchOption,
   type Coord,
+  type EngineGame,
   type Game,
   type GameMeta,
   type GameSetup,
@@ -447,6 +448,33 @@ export function toSummary(game: Game): GameSummary {
     ...(game.meta.blackName === undefined ? {} : { blackName: game.meta.blackName }),
     ...(game.meta.whiteName === undefined ? {} : { whiteName: game.meta.whiteName }),
     ...(game.meta.date === undefined ? {} : { date: game.meta.date }),
+    ...(game.meta.event === undefined ? {} : { event: game.meta.event }),
     ...(game.meta.result === undefined ? {} : { result: game.meta.result }),
+  }
+}
+
+/**
+ * The self-contained engine payload for a library record: main's counterpart of
+ * the renderer's `toEngineGame` (`renderer/state/gameStore.ts`), which M3's
+ * agent tools need because they read the record from the library store, and a
+ * main-process module cannot import renderer code.
+ *
+ * The duplication is deliberate and bounded, not an oversight. The function
+ * cannot live in `packages/core` for the reason this module's header records
+ * (an IPC payload shape must not leak into the domain layer), and it cannot be
+ * shared with the renderer because the two sides legitimately differ: the
+ * renderer correlates the engine by the *branch-suffixed* id (`<hash>~v<n>`),
+ * while the library record mains with is the bare content hash and always
+ * mainline. Each copy is unit-tested on its own invariants; if the projection
+ * ever grows a rule, this comment is the marker saying both sides must move.
+ */
+export function toEngineGame(game: Game): EngineGame {
+  return {
+    gameId: game.id,
+    boardSize: game.meta.boardSize,
+    komi: game.meta.komi,
+    rules: game.meta.ruleset ?? '',
+    setup: game.setup,
+    moves: game.moves.map((move) => ({ player: move.player, coord: move.coord })),
   }
 }

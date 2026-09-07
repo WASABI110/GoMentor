@@ -38,6 +38,7 @@ export type Scope =
   | 'main:library'
   | 'main:sgf'
   | 'main:llm:service'
+  | 'main:llm:tools'
   | 'main:katago:process'
   | 'main:katago:service'
   | 'main:katago:session'

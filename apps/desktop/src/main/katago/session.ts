@@ -132,8 +132,17 @@ export const REPORT_DURING_SEARCH_EVERY_S = 0.1
  * picks White when handicap stones are on the board, Black otherwise
  * (`cpp/command/analysis.cpp`, `initialPlayer`, fetched 2026-09-05) — this
  * mirrors that so the `player` recorded on results matches what was analysed.
+ *
+ * Takes the structural subset (`moves` + `setup`) rather than `EngineGame` so
+ * the library `Game` satisfies it too: M3's agent tools compute side-to-move
+ * from a library record, and two definitions of move parity — one here, one in
+ * the tool layer — is exactly how they drift. `Game['moves']` carries extra
+ * fields (`number`, `comment`), which is fine for a parameter.
  */
-export function playerToMoveAt(game: EngineGame, moveNumber: number): Player {
+export function playerToMoveAt(
+  game: Pick<EngineGame, 'moves' | 'setup'>,
+  moveNumber: number,
+): Player {
   if (moveNumber < game.moves.length) {
     const next = game.moves[moveNumber]
     if (next !== undefined) return next.player
@@ -239,6 +248,63 @@ export function buildSweepQuery(
     ],
     maxVisits: SWEEP_MAX_VISITS,
     includeOwnership: false,
+  }
+}
+
+/**
+ * Visit budget for the agent tier's one-shot queries — fixed, not from
+ * settings, for the same reason the sweep's cap is fixed (M3 adds no settings
+ * surface). 128 is a deliberate step up from the sweep's 100, not a copy of
+ * the focus cap: the teacher quotes winrates and candidate ordering, which
+ * needs a stabler read than a graph point, but the query rides the same
+ * engine as the user's focus analysis and a 500-visit agent query would spend
+ * the user's latency budget to answer a question they did not ask. The split
+ * (`analysisThreadSplit`) already bounds the *concurrency* damage; the visit
+ * cap bounds the *duration* of each agent query.
+ */
+export const AGENT_QUERY_VISITS = 128
+
+/**
+ * Builds the LLM agent tools' one-shot query (`analyzeOnce`).
+ *
+ * Deliberately its own function, not a parameterised `buildFocusQuery`, for the
+ * recorded reason `buildSweepQuery` exists: the tiers differ in fixed ways and
+ * spelling them out is the mutation-covered record of the contract. Agent
+ * queries differ from focus in three ways, each with a reason:
+ *
+ * - **`AGENT_QUERY_VISITS`, not the settings cap** — see above.
+ * - **Ownership on** — the `get_analysis` tool returns an ownership summary,
+ *   which is information the graph tier does not need but the teacher does
+ *   (`design.md` §工具注册表).
+ * - **No `reportDuringSearchEvery`** — like the sweep, the consumer awaits one
+ *   final answer; streaming partials for a query nobody streams is wire noise
+ *   the session would only have to drop.
+ *
+ * Everything else — prefix slicing, setup stones as `initialStones`, rules
+ * mapping, clamping — is the focus machinery's semantics, reused through the
+ * same code shape rather than reimplemented. The id is supplied by the caller
+ * (`agent:<n>`, `AGENT_QUERY_PREFIX`); this builder never invents one.
+ */
+export function buildAgentQuery(
+  id: string,
+  game: EngineGame,
+  atMove: number,
+): AnalysisQuery {
+  const moveNumber = Math.max(0, Math.min(Math.trunc(atMove), game.moves.length))
+  return {
+    id,
+    boardSize: game.boardSize,
+    komi: game.komi,
+    rules: toKataGoRuleset(game.rules),
+    moves: game.moves
+      .slice(0, moveNumber)
+      .map((move) => ({ player: move.player, coord: move.coord })),
+    initialStones: [
+      ...game.setup.black.map((coord) => ({ player: 'black' as const, coord })),
+      ...game.setup.white.map((coord) => ({ player: 'white' as const, coord })),
+    ],
+    maxVisits: AGENT_QUERY_VISITS,
+    includeOwnership: true,
   }
 }
 

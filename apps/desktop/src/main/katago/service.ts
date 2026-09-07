@@ -2,15 +2,19 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import {
   encodeAnalysisRequest,
+  encodeTerminateRequest,
   parseAnalysisResponse,
 } from '@gomentor/core/katago/analysis'
 import type {
   AnalysisResult,
+  BoardSize,
   EngineGame,
   EngineInfo,
   ErrorCode,
+  Player,
   Settings,
 } from '@gomentor/shared'
+import { AGENT_QUERY_PREFIX, AppError } from '@gomentor/shared'
 import { scoped, type Logger } from '../logger'
 import { emit } from '../ipc/events'
 import { engineConfigFile } from '../paths'
@@ -23,7 +27,13 @@ import {
   type ExitInfo,
   type SpawnFn,
 } from './process'
-import { createAnalysisSession, type AnalysisSession } from './session'
+import {
+  buildAgentQuery,
+  createAnalysisSession,
+  playerToMoveAt,
+  type AnalysisSession,
+} from './session'
+import { normalizeAnalysisResult } from './perspective'
 import { createSweepLedger, type SweepLedger } from './sweep'
 import { reduceEnginePhase, type EngineEvent, type EnginePhase } from './state-machine'
 
@@ -75,6 +85,29 @@ import { reduceEnginePhase, type EngineEvent, type EnginePhase } from './state-m
  * measured and ~20s at the low end before the first completion. 30s bounds
  * the envelope's low end with margin and still turns "awaited forever" into
  * "restarted within half a minute".
+ *
+ * ## The agent tier (`analyzeOnce`, M3)
+ *
+ * The LLM tools need a one-shot analysis of an arbitrary position. It must not
+ * ride `setGame`/`setCursor`: those are the *user's* cursor session, where a
+ * new focus query terminates the in-flight one — an agent query issued while a
+ * user studies a position would silently cancel the user's own analysis. So
+ * the agent tier is a third query namespace (`agent:<n>`), issued directly by
+ * this service exactly like the readiness probe: a deferred keyed by id,
+ * resolved by the first well-formed complete line that names it, bounded by a
+ * deadline. It touches nothing the session owns — not `desired`, not the
+ * sweep, not the cursor debounce — and its result is never emitted on
+ * `engine:analysis`; it is returned to the caller. Terminate-on-timeout and
+ * terminate-on-abort follow KataGo's documented terminate semantics, which is
+ * also what keeps a bounded agent query from outliving its run.
+ *
+ * The watchdog does not see agent queries (it counts the session's in-flight
+ * population), and that is deliberate rather than a gap: a hang with only an
+ * agent query in flight is bounded by `analyzeOnce`'s own deadline, and a hang
+ * with user queries in flight trips the watchdog regardless. The agent
+ * deadline reuses `probeDeadlineMs` because both bound one query's honest
+ * round trip on a possibly-cold engine — the same generous default covers the
+ * same first-analysis risk.
  *
  * ## What stays deliberate
  *
@@ -129,6 +162,25 @@ export interface EngineService {
    * when no record is held or the engine is not ready.
    */
   setCursor(moveNumber: number): { readonly focusQueryId: string | null }
+  /**
+   * Runs one independent agent-tier analysis of `game` at `moveNumber` and
+   * resolves with the perspective-normalised result (`perspective.ts`: winrate
+   * side-to-move, scoreLead and ownership black-anchored). Independent by
+   * contract: it never touches `desired`, the sweep, or the cursor debounce,
+   * so an in-flight user focus query survives it.
+   *
+   * Throws `AppError`, never a bare `Error`: `ENGINE_UNAVAILABLE` when the
+   * engine is not ready (an expected state with a UI, not a crash path),
+   * `ENGINE_QUERY_FAILED` when a live engine fails to answer (deadline, exit,
+   * malformed reply), `LLM_ABORTED` when `signal` fires — cancellation is an
+   * expected outcome, and the tool layer re-throws it rather than reporting it
+   * as a tool failure.
+   */
+  analyzeOnce(
+    game: EngineGame,
+    moveNumber: number,
+    signal?: AbortSignal,
+  ): Promise<AnalysisResult>
   /** Terminates the child on app quit. A spawned child never outlives the app. */
   shutdown(): Promise<void>
 }
@@ -168,6 +220,33 @@ type ProbeResult =
   | { readonly kind: 'exit'; readonly info: ExitInfo }
   | { readonly kind: 'deadline' }
   | { readonly kind: 'parse-failed' }
+
+/**
+ * How one agent query ended. `exit` covers every path where the process that
+ * owed the answer is gone or going (crash, watchdog kill, shutdown); the
+ * caller's error text, not this variant's name, carries the distinction.
+ */
+type AgentQueryOutcome =
+  | { readonly kind: 'response'; readonly result: AnalysisResult }
+  | { readonly kind: 'deadline' }
+  | { readonly kind: 'parse-failed' }
+  | { readonly kind: 'exit' }
+  | { readonly kind: 'aborted' }
+
+/** Correlation context for one agent query, as `parseAnalysisResponse` wants it. */
+interface AgentQueryContext {
+  readonly gameId: string
+  readonly moveNumber: number
+  readonly player: Player
+  readonly boardSize: BoardSize
+}
+
+interface AgentQuery {
+  readonly context: AgentQueryContext
+  readonly deferred: Deferred<AgentQueryOutcome>
+  /** Cancels the deadline; called on every settle so no timer leaks. */
+  readonly cancelDeadline: () => void
+}
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -264,6 +343,16 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
    * is the recorded "a new record restarts the sweep" rule.
    */
   let sweepLedger: SweepLedger | null = null
+  /**
+   * In-flight agent-tier queries, keyed by their `agent:<n>` id — the probe
+   * mechanism generalised from one outstanding deferred to a map, because the
+   * agent tier is concurrent (several tool calls across runs) while the probe
+   * is one-per-spawn. Cleared on every path where the process stops answering
+   * (crash, watchdog kill, shutdown), so a waiter cannot outlive the engine
+   * that owed it an answer.
+   */
+  const agentQueries = new Map<string, AgentQuery>()
+  let agentQueryCounter = 0
   let startPromise: Promise<EngineInfo> | null = null
   let stopped = false
 
@@ -386,6 +475,76 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
     }
   }
 
+  /** Settles one agent query exactly once and disarms its deadline. */
+  function settleAgentQuery(id: string, outcome: AgentQueryOutcome): void {
+    const query = agentQueries.get(id)
+    if (query === undefined) return
+    agentQueries.delete(id)
+    query.cancelDeadline()
+    // The deferred's own guard makes a double settle (abort racing the
+    // deadline racing the answer) a no-op rather than a second resolution.
+    query.deferred.resolve(outcome)
+  }
+
+  /**
+   * Settles every in-flight agent query as `exit`. Called wherever the process
+   * stops answering as a whole — the crash path, the watchdog kill, shutdown.
+   * Without this a waiter would hang until its deadline for an answer the
+   * process can now never give.
+   */
+  function failAllAgentQueries(): void {
+    for (const id of [...agentQueries.keys()]) {
+      settleAgentQuery(id, { kind: 'exit' })
+    }
+  }
+
+  /**
+   * Routes one framed stdout line to a waiting agent query, by id — the same
+   * routing discipline the probe and the session use, which is what makes
+   * three handlers safe to run for every line: each ignores the ids it does
+   * not own. `handleAgentLine` peeks the id before parsing so focus, sweep,
+   * and probe traffic pays one `JSON.parse`-shaped glance and nothing more.
+   */
+  function handleAgentLine(line: string): void {
+    if (agentQueries.size === 0) return
+    let wireId: unknown
+    try {
+      const raw: unknown = JSON.parse(line)
+      wireId =
+        typeof raw === 'object' && raw !== null
+          ? (raw as Record<string, unknown>)['id']
+          : undefined
+    } catch {
+      // Genuinely ignorable, and not invisible: the session handler logs an
+      // unparseable line at `debug`, and this router can only ever be waiting
+      // on a well-formed frame. Returning here skips the parse below, which is
+      // the whole point of the peek.
+      return
+    }
+    if (typeof wireId !== 'string') return
+    const query = agentQueries.get(wireId)
+    if (query === undefined) return
+
+    let parsed: AnalysisResult
+    try {
+      parsed = parseAnalysisResponse(line, query.context)
+    } catch (error) {
+      // Unlike the probe — whose garbage answer means the engine never spoke
+      // the protocol and is fatal — a garbage answer to an *agent* query on a
+      // proven-ready engine is one failed query, and fails like any other.
+      log.failure('agent query response was not a well-formed analysis result', error, {
+        queryId: wireId,
+      })
+      settleAgentQuery(wireId, { kind: 'parse-failed' })
+      return
+    }
+    // Complete results only: the query carries no `reportDuringSearchEvery`,
+    // so a partial would be an engine misbehaviour, not a progress report to
+    // await past (the sweep drops partials for the same reason).
+    if (!parsed.complete) return
+    settleAgentQuery(wireId, { kind: 'response', result: parsed })
+  }
+
   /**
    * The watchdog (B6): armed while the session reports queries in flight,
    * refreshed by every framed stdout line, and fired by silence beyond the
@@ -433,12 +592,19 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       inFlight: session?.inFlightCount() ?? 0,
       deadlineMs: watchdogDeadlineMs,
     })
-    // Protocol courtesy first: one terminate per in-flight id. Against a
-    // hung engine these are cheap no-ops on a dead stdin; against a merely
-    // stuck one they let it conclude cleanly. Either way the kill below is
-    // what actually frees the child — per design, a tripped watchdog always
-    // restarts, it does not forgive.
+    // Protocol courtesy first: one terminate per in-flight id — the session's,
+    // plus any agent query in flight (the watchdog does not count agent
+    // queries toward arming, but once it has tripped they are in-flight work
+    // on the same dying process and get the same courtesy). Against a hung
+    // engine these are cheap no-ops on a dead stdin; against a merely stuck
+    // one they let it conclude cleanly. Either way the kill below is what
+    // actually frees the child — per design, a tripped watchdog always
+    // restarts, it does not forgive. The waiters themselves are settled by the
+    // crash path this trip feeds, not here.
     session?.terminateAllInFlight()
+    for (const id of agentQueries.keys()) {
+      live?.send(encodeTerminateRequest(id))
+    }
     if (live === null) {
       watchdogTripping = false
       return
@@ -471,6 +637,9 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
     proc = null
     session?.dispose()
     session = null
+    // The process that owed the agent answers is gone; holding the waiters
+    // would only hang them until their deadlines.
+    failAllAgentQueries()
     // Prune to the window before consulting the breaker: entries older than
     // RETRY_WINDOW_MS have already served their purpose, and keeping them
     // would both grow the array forever and (were planRetry's own filter
@@ -610,9 +779,10 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
         onLine: (line) => {
           noteActivity()
           handleProbeLine(line, probe)
-          // Probe lines carry the probe id, which the session does not own;
-          // session lines likewise carry no probe id. Routing by id makes the
-          // two handlers safe to run for every line.
+          // Probe lines carry the probe id, agent lines the `agent:<n>` prefix,
+          // and session lines neither — all three handlers are safe to run for
+          // every line because each routes by id and ignores the rest.
+          handleAgentLine(line)
           session?.handleLine(line)
         },
         onExit: (info) => {
@@ -726,6 +896,125 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       return { focusQueryId: session.setCursor(moveNumber) }
     },
 
+    async analyzeOnce(game, moveNumber, signal) {
+      // Expected absence, not an exception path: the caller (the tool layer)
+      // turns this into a readable tool result the model can relay.
+      if (stopped) {
+        throw new AppError('ENGINE_UNAVAILABLE', 'the engine service is shut down')
+      }
+      if (phase !== 'ready' || session === null || proc === null) {
+        throw new AppError(
+          'ENGINE_UNAVAILABLE',
+          `the engine is ${phase}, not ready — analysis is available once it starts`,
+        )
+      }
+      // A signal that was already dead on arrival never fires an `abort` event,
+      // so the listener below would never run: this method would spend a real
+      // engine query on a run nobody is waiting for, then resolve with an
+      // answer instead of the documented `LLM_ABORTED`. Checked here rather
+      // than trusted to the caller — the tool layer happens to guard its own
+      // entry, but `analyzeOnce` is a public service method and the guard is
+      // one branch.
+      if (signal?.aborted === true) {
+        throw new AppError(
+          'LLM_ABORTED',
+          'the analysis query was cancelled before it was issued',
+        )
+      }
+
+      agentQueryCounter += 1
+      const queryId = `${AGENT_QUERY_PREFIX}${String(agentQueryCounter)}`
+      // Clamped, not rejected, exactly like `buildFocusQuery`: an agent query
+      // past the end of a record studies the final position. The *tool* layer
+      // validates the bound and reports it to the model; the service's job is
+      // to answer for whatever position it is handed.
+      const at = Math.max(0, Math.min(Math.trunc(moveNumber), game.moves.length))
+      const context: AgentQueryContext = {
+        gameId: game.gameId,
+        moveNumber: at,
+        player: playerToMoveAt(game, at),
+        boardSize: game.boardSize,
+      }
+
+      const deferred = createDeferred<AgentQueryOutcome>()
+      const deadline = setTimer(() => {
+        // Terminate, then settle: KataGo still owes exactly one final reply for
+        // a terminated query, and the late reply finds no waiter here and no
+        // session entry — it falls through both routers harmlessly.
+        proc?.send(encodeTerminateRequest(queryId))
+        settleAgentQuery(queryId, { kind: 'deadline' })
+      }, probeDeadlineMs)
+      agentQueries.set(queryId, {
+        context,
+        deferred,
+        cancelDeadline: deadline,
+      })
+
+      // Cancellation terminates the query rather than only abandoning it: a
+      // cancelled run must not leave the engine burning visits on an answer
+      // nobody will read.
+      const onAbort = (): void => {
+        proc?.send(encodeTerminateRequest(queryId))
+        settleAgentQuery(queryId, { kind: 'aborted' })
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+
+      proc.send(encodeAnalysisRequest(buildAgentQuery(queryId, game, at)))
+      log.debug('agent query issued', {
+        id: queryId,
+        gameId: context.gameId,
+        moveNumber: at,
+        player: context.player,
+      })
+
+      try {
+        const outcome = await deferred.promise
+        switch (outcome.kind) {
+          case 'response':
+            // The KataGo→contract adaptation in one place, as on the focus and
+            // sweep paths: the tool gets contract-shaped numbers, not engine
+            // side-to-move ones.
+            return normalizeAnalysisResult(outcome.result, context.player)
+          case 'deadline':
+            throw new AppError(
+              'ENGINE_QUERY_FAILED',
+              'the engine did not answer the analysis query in time',
+              { context: { queryId, deadlineMs: probeDeadlineMs } },
+            )
+          case 'parse-failed':
+            throw new AppError(
+              'ENGINE_QUERY_FAILED',
+              'the engine answered the analysis query with a malformed result',
+              { context: { queryId } },
+            )
+          case 'exit':
+            throw new AppError(
+              'ENGINE_QUERY_FAILED',
+              'the engine stopped before answering the analysis query',
+              { context: { queryId } },
+            )
+          case 'aborted':
+            // Cancellation is an expected outcome (`error-handling.md`), and
+            // the LLM code is the right family: the abort comes from the run's
+            // own signal, not from an engine fault.
+            throw new AppError('LLM_ABORTED', 'the analysis query was cancelled')
+        }
+      } finally {
+        signal?.removeEventListener('abort', onAbort)
+        // The await above resolves only through `settleAgentQuery`, which has
+        // already removed the entry and disarmed the deadline — so this is a
+        // no-op on every path today. It stays because it disposes the
+        // bookkeeping rather than leaking it if a future edit ever resolves
+        // the deferred directly.
+        const pending = agentQueries.get(queryId)
+        agentQueries.delete(queryId)
+        // Optional chain, not an assertion: the entry is always there on every
+        // path today, and `?.` degrades to a no-op instead of a crash if that
+        // invariant is ever broken.
+        pending?.cancelDeadline()
+      }
+    },
+
     async shutdown() {
       stopped = true
       // A pending backoff respawn must die here: the timer callback checks
@@ -736,6 +1025,9 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
         retryCancel()
         retryCancel = null
       }
+      // Settled before the process stop below: a `analyzeOnce` awaiting during
+      // quit resolves with a typed error instead of hanging until its deadline.
+      failAllAgentQueries()
       disarmWatchdog()
       const live = proc
       proc = null

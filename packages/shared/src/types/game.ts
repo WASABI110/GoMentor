@@ -163,6 +163,13 @@ export const gameSummarySchema = z.object({
   blackName: z.string().optional(),
   whiteName: z.string().optional(),
   date: z.string().optional(),
+  /**
+   * SGF `EV`, when the record carries one. Additive in M3: the agent's
+   * `search_library` tool filters on event metadata, which only `GameMeta`
+   * carried — and a tool that loaded every full record to read one field
+   * would defeat the reason summaries exist.
+   */
+  event: z.string().optional(),
   moveCount: z.number().int().min(0),
   boardSize: boardSizeSchema,
   result: gameResultSchema.optional(),

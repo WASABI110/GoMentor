@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review standards the check agent enforces: forbidden patterns, testing requirements, mutation expectations for the new pure cores (runner step logic, library filter, tool schemas)."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify LLM_AGENT_LIMIT is registered append-only, the error envelope survives IPC, and degrade paths add no wire-level tools parameter."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify tool arguments/results never reach the log sink (prompts/chat-text class)."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify tool-step rows match TeacherPanel conventions and i18n values are real translations, not key parity."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check the unchanged-IPC claim holds: shared types, main, preload, renderer must all still line up with the existing A9 meta-test green."}
+{"file": ".trellis/tasks/09-07-llm-agent-loop/design.md", "reason": "Check implementation against the recorded decisions: analyzeOnce isolation from the cursor session, serial execution, step cap, degrade tri-state."}

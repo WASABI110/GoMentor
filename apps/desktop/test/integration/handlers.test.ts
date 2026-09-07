@@ -180,6 +180,11 @@ function fakeEngine() {
       calls.cursors.push(moveNumber)
       return { focusQueryId: 'focus:2' }
     },
+    // Not reachable through any channel (M3 Stage 1 adds no IPC surface); the
+    // method exists so this stub satisfies the `EngineService` interface the
+    // agent tools will consume in Stage 2.
+    analyzeOnce: () =>
+      Promise.reject(new Error('analyzeOnce is not exercised by these handlers')),
     notifyStatus: () => undefined,
     shutdown: () => Promise.resolve(),
   }

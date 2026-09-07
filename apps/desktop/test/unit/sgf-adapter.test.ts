@@ -5,7 +5,7 @@ import { parseSgf } from '@gomentor/core/sgf/parser'
 import { getBoardSize, getSetup } from '@gomentor/core/sgf/props'
 import { replay } from '@gomentor/core/board/position'
 import { isAppError, type BoardSize, type Game } from '@gomentor/shared'
-import { toGame, toSummary } from '../../src/main/sgf/adapter'
+import { toEngineGame, toGame, toSummary } from '../../src/main/sgf/adapter'
 
 /**
  * `main/sgf/adapter.ts` — the AST → `Game` projection, against the real corpus.
@@ -266,6 +266,48 @@ describe('toSummary', () => {
     expect(handicap).toBeDefined()
     if (handicap === undefined) return
     expect(toSummary(handicap.game).moveCount).toBe(handicap.game.moves.length)
+  })
+
+  it('carries the event only when the record has one (M3 search metadata)', () => {
+    // Both halves asserted: a summary that always omitted `event` would starve
+    // `search_library`'s event filter, and one that always included it would
+    // invent an undefined key the wire schema has to tolerate.
+    const withEvent = PROJECTED.filter((p) => p.game.meta.event !== undefined)
+    const withoutEvent = PROJECTED.filter((p) => p.game.meta.event === undefined)
+    expect(withEvent.length).toBeGreaterThan(0)
+    expect(withoutEvent.length).toBeGreaterThan(0)
+    for (const { name, game } of withEvent) {
+      expect(toSummary(game).event, name).toBe(game.meta.event)
+    }
+    for (const { name, game } of withoutEvent) {
+      expect('event' in toSummary(game), name).toBe(false)
+    }
+  })
+})
+
+describe('toEngineGame (the M3 agent-tool payload)', () => {
+  it('agrees with the projected game across the corpus', () => {
+    for (const { name, game } of PROJECTED) {
+      const payload = toEngineGame(game)
+      expect(payload.gameId, name).toBe(game.id)
+      expect(payload.boardSize, name).toBe(game.meta.boardSize)
+      expect(payload.komi, name).toBe(game.meta.komi)
+      // The raw ruleset string rides as-is; the session maps it.
+      expect(payload.rules, name).toBe(game.meta.ruleset ?? '')
+      expect(payload.setup, name).toEqual(game.setup)
+      expect(payload.moves, name).toHaveLength(game.moves.length)
+    }
+  })
+
+  it('projects moves down to the engine payload shape, dropping display fields', () => {
+    // `number` and `comment` are projection metadata; the engine takes the
+    // move itself. Extra keys would still typecheck structurally and still be
+    // the wrong payload.
+    const withMoves = PROJECTED.find((p) => p.game.moves.length > 0)
+    expect(withMoves).toBeDefined()
+    if (withMoves === undefined) return
+    const payload = toEngineGame(withMoves.game)
+    expect(Object.keys(payload.moves[0] ?? {}).sort()).toEqual(['coord', 'player'])
   })
 })
 

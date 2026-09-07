@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { EngineGame } from '@gomentor/shared'
 import {
+  AGENT_QUERY_VISITS,
+  buildAgentQuery,
   buildFocusQuery,
   buildSweepQuery,
   createAnalysisSession,
@@ -272,6 +274,46 @@ describe('buildSweepQuery', () => {
   it('clamps the cursor exactly like the focus query', () => {
     expect(buildSweepQuery('sweep:1', game, 99).moves).toHaveLength(3)
     expect(buildSweepQuery('sweep:1', game, -5).moves).toHaveLength(0)
+  })
+})
+
+describe('buildAgentQuery', () => {
+  const game = engineGame({
+    setup: { black: [{ x: 3, y: 3 }], white: [] },
+    moves: [
+      { player: 'black', coord: { x: 3, y: 3 } },
+      { player: 'white', coord: { x: 15, y: 3 } },
+      { player: 'black', coord: { x: 3, y: 15 } },
+    ],
+  })
+
+  it('carries the agent contract: its own visit budget, ownership on, no streaming reports', () => {
+    const query = buildAgentQuery('agent:1', game, 2)
+    // The three differences from focus are the tier's whole point
+    // (`service.ts` §The agent tier): a small fixed budget protects the
+    // user's cursor latency, the teacher quotes an ownership summary, and the
+    // consumer awaits one final answer so mid-search reports are pure noise.
+    expect(query.maxVisits).toBe(AGENT_QUERY_VISITS)
+    expect(AGENT_QUERY_VISITS).toBe(128)
+    expect(query.includeOwnership).toBe(true)
+    expect('reportDuringSearchEvery' in query).toBe(false)
+    // The id is the caller's, never invented here.
+    expect(query.id).toBe('agent:1')
+  })
+
+  it('slices the record prefix and carries setup as initialStones like the other tiers', () => {
+    const query = buildAgentQuery('agent:1', game, 2)
+    expect(query.moves).toHaveLength(2)
+    expect(query.moves.at(-1)).toEqual({ player: 'white', coord: { x: 15, y: 3 } })
+    expect(query.initialStones).toEqual([{ player: 'black', coord: { x: 3, y: 3 } }])
+    expect(query.rules).toBe('japanese')
+    expect(query.boardSize).toBe(19)
+    expect(query.komi).toBe(6.5)
+  })
+
+  it('clamps exactly like the other tiers', () => {
+    expect(buildAgentQuery('agent:1', game, 99).moves).toHaveLength(3)
+    expect(buildAgentQuery('agent:1', game, -5).moves).toHaveLength(0)
   })
 })
 
