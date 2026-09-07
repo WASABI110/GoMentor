@@ -25,6 +25,7 @@
     "LLM_NO_TOOL_SUPPORT": "当前模型不支持工具调用。",
     "LLM_BAD_RESPONSE": "AI 教师返回了无法解析的内容。",
     "LLM_UNREACHABLE": "无法连接到 AI 服务。",
+    "LLM_AGENT_LIMIT": "AI 教师回答这个问题所需的步骤过多，已停止。请试着问得更具体一些。",
     "IPC_INVALID_REQUEST": "请求格式不正确。",
     "IPC_INVALID_RESPONSE": "返回数据格式不正确。",
     "IPC_HANDLER_FAILED": "操作失败。",

@@ -43,8 +43,10 @@ function createServices() {
   const settings = createSettingsService()
   const secrets = createSecretsService(settings.secretStore, electronEncryptor)
   const store = createGameStore()
-  const llm = createLlmService(settings, secrets)
+  // The engine before the LLM service: the agent loop's tool calls reach into
+  // it, so it must exist by the time a run can start.
   const engine = createEngineService({ settings })
+  const llm = createLlmService(settings, secrets, { store, engine })
   const telemetry = createTelemetry()
   return { settings, secrets, store, llm, engine, telemetry }
 }

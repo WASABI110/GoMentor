@@ -280,7 +280,23 @@ test.describe('the built app launches, shows three panels, and answers', () => {
     // first; a request that never arrived cannot have produced the text above, but
     // this is what distinguishes "the model was asked the right thing" from "some
     // request was made".
-    expect(model.bodies).toHaveLength(1)
-    expect(model.bodies[0]).toContain(PROMPT)
+    //
+    // Two requests, in a fixed order, since M3: tool support on a fresh local
+    // provider is `null` (never probed), so the first send runs the capability
+    // probe before the real turn, and the mock's prose answer measures
+    // `no_tool_call`, degrading this run to the single-shot path. The reply
+    // request is therefore second and is the one carrying the prompt. Asserted
+    // as an ordered pair rather than "at least one contains it": a probe that
+    // stopped happening, or a probe that replaced the real turn, should both
+    // fail here.
+    expect(model.bodies).toHaveLength(2)
+    expect(model.bodies[0]).toContain('report_probe_ok')
+    expect(model.bodies[1]).toContain(PROMPT)
+    // A3 at the HTTP boundary: the reply request is the degraded single-shot
+    // one, so its body carries no `tools` key at all. The integration suite
+    // asserts this on the `ChatRequest` and the core suite on an encoder it
+    // drives directly; this is the composition — the shipping service's
+    // request body, as the server actually received it.
+    expect(model.bodies[1]).not.toContain('"tools"')
   })
 })

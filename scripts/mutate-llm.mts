@@ -1,6 +1,6 @@
 /**
- * Mutation harness for the M3 LLM agent layer — Stage 1's tool registry and
- * the agent tier's pure query construction.
+ * Mutation harness for the M3 LLM agent layer — Stage 1's tool registry, the
+ * agent tier's pure query construction, and Stage 2's agent-loop pure core.
  *
  * A passing suite proves the code does not crash. It does not prove the
  * assertions are load-bearing. This deliberately breaks each decision the layer
@@ -14,20 +14,23 @@
  * mutated run whose test total differs from baseline broke collection rather
  * than behaviour, and is reported INVALID rather than counted as caught.
  *
- * One run covers both suites the mutants live in: the tool registry's unit
- * tests (`apps/desktop/test/unit/llm`) and the katago session's pure builders
- * (`apps/desktop/test/unit/katago`, where `buildAgentQuery` and its visit
- * budget are tested next to their focus/sweep siblings). A single vitest
- * invocation with two path filters halves the spawns and the total is still
- * comparable across baseline and mutants, which is all the gate needs. Filters
- * are relative to the *project* root, not the repo root — the exact mistake the
- * baseline gate exists to catch, since a filter that matches nothing exits 0.
+ * One run covers both suites the mutants live in: the tool registry's and the
+ * loop core's unit tests (`apps/desktop/test/unit/llm`) and the katago
+ * session's pure builders (`apps/desktop/test/unit/katago`, where
+ * `buildAgentQuery` and its visit budget are tested next to their focus/sweep
+ * siblings). A single vitest invocation with two path filters halves the spawns
+ * and the total is still comparable across baseline and mutants, which is all
+ * the gate needs. Filters are relative to the *project* root, not the repo
+ * root — the exact mistake the baseline gate exists to catch, since a filter
+ * that matches nothing exits 0.
  *
- * Deliberately not covered here: `service.ts`'s `analyzeOnce` wiring. Its
- * correctness is a property of a real spawned child — pipes, routing, exit
- * handling — and the integration suite (`test/integration/agent-query.test.ts`)
- * asserts it against the fake child, which is far too slow to run per mutant.
- * The service layer is excluded from the katago harness for the same reason.
+ * Deliberately not covered here: the loop's stream plumbing
+ * (`runAgentLoop`/`consumeTurn`) and `service.ts`'s wiring. Their correctness
+ * is a property of a live stream — chunk interleaving, cancellation mid-turn,
+ * event fan-out — and the integration suite
+ * (`test/integration/llm-agent.test.ts`) asserts it against a scripted
+ * provider, which is far too slow to run per mutant. The service layer is
+ * excluded from the katago harness for the same reason.
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -36,6 +39,7 @@ import { resolve } from 'node:path'
 const ROOT = resolve(import.meta.dirname, '..')
 const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g')
 const TOOLS = 'apps/desktop/src/main/llm/agent/tools.ts'
+const RUNNER = 'apps/desktop/src/main/llm/agent/runner.ts'
 const SESSION = 'apps/desktop/src/main/katago/session.ts'
 
 interface Mutation {
@@ -249,6 +253,63 @@ const MUTATIONS: Mutation[] = [
     what: "let the builder invent the query id instead of using the caller's",
     from: 'export function buildAgentQuery(\n  id: string,\n  game: EngineGame,\n  atMove: number,\n): AnalysisQuery {\n  const moveNumber = Math.max(0, Math.min(Math.trunc(atMove), game.moves.length))\n  return {\n    id,',
     to: "export function buildAgentQuery(\n  id: string,\n  game: EngineGame,\n  atMove: number,\n): AnalysisQuery {\n  const moveNumber = Math.max(0, Math.min(Math.trunc(atMove), game.moves.length))\n  return {\n    id: 'agent:0',",
+  },
+  // --- runner.ts: the agent loop's pure core (Stage 2) --------------------
+  {
+    id: 'R1',
+    file: RUNNER,
+    what: 'multiply the step budget tenfold (a runaway run stops costing little)',
+    from: 'export const MAX_AGENT_STEPS = 8',
+    to: 'export const MAX_AGENT_STEPS = 80',
+  },
+  {
+    id: 'R2',
+    file: RUNNER,
+    what: 'make the cap exclusive (an eighth tool turn buys a ninth provider call)',
+    from: '  return completedSteps >= MAX_AGENT_STEPS',
+    to: '  return completedSteps > MAX_AGENT_STEPS',
+  },
+  {
+    id: 'R3',
+    file: RUNNER,
+    what: 'read null (never probed) as tool support (degrade becomes a guess)',
+    from: '  return capability === true',
+    to: '  return capability !== false',
+  },
+  {
+    id: 'R4',
+    file: RUNNER,
+    what: 'accept any JSON value as arguments (an array becomes {"0":...})',
+    from: "  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {",
+    to: "  if (typeof parsed !== 'object' || parsed === null) {",
+  },
+  {
+    id: 'R5',
+    file: RUNNER,
+    what: 'let malformed JSON through as empty arguments (dispatch runs on nothing)',
+    from: `    return { ok: false, reason: 'the arguments were not valid JSON' }`,
+    to: '    return { ok: true, value: {} }',
+  },
+  {
+    id: 'R6',
+    file: RUNNER,
+    what: 'drop isError from the assembled tool reply (the model cannot self-correct)',
+    from: '      isError: entry.outcome.isError,',
+    to: '      isError: false,',
+  },
+  {
+    id: 'R7',
+    file: RUNNER,
+    what: 'misrecord the rejection reason (the loop dispatches on arguments that never parsed)',
+    from: '      invalid.set(call.id, `IPC_INVALID_REQUEST: ${parsed.reason}`)',
+    to: "      invalid.set('untracked', `IPC_INVALID_REQUEST: ${parsed.reason}`)",
+  },
+  {
+    id: 'R8',
+    file: RUNNER,
+    what: 'revert the null-prototype args record (model-supplied __proto__ poisons the object again)',
+    from: '  const value: Record<string, unknown> = Object.create(null) as Record<string, unknown>',
+    to: '  const value: Record<string, unknown> = {} as Record<string, unknown>',
   },
 ]
 

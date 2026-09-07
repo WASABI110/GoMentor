@@ -11,7 +11,15 @@ export function registerLlmHandlers(llm: LlmService): void {
     // Returns immediately with a handle. The reply streams over `llm:delta`
     // events correlated by this id — see `llm/service.ts` for why this is not
     // request/response.
-    runId: llm.send({ content: request.content, history: request.history }),
+    //
+    // `context` rides along (M3): it names the game the renderer is looking
+    // at, which the agent loop's tool calls default to. The channel's request
+    // schema has carried it since M1.
+    runId: llm.send({
+      content: request.content,
+      history: request.history,
+      ...(request.context === undefined ? {} : { context: request.context }),
+    }),
   }))
 
   handle('llm:cancel', (request) => {

@@ -25,6 +25,7 @@
     "LLM_NO_TOOL_SUPPORT": "This model does not support tool calls.",
     "LLM_BAD_RESPONSE": "The teacher returned something that could not be read.",
     "LLM_UNREACHABLE": "The AI service could not be reached.",
+    "LLM_AGENT_LIMIT": "The teacher needed too many steps for this answer, so it stopped. Try asking something more specific.",
     "IPC_INVALID_REQUEST": "That request was not in the expected form.",
     "IPC_INVALID_RESPONSE": "The response was not in the expected form.",
     "IPC_HANDLER_FAILED": "The operation failed.",

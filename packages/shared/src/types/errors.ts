@@ -58,6 +58,12 @@ export const errorCodeSchema = z.enum([
   'LLM_NO_TOOL_SUPPORT',
   'LLM_BAD_RESPONSE',
   'LLM_UNREACHABLE',
+  // The agent loop's own bound (M3): the model kept requesting tools past
+  // MAX_AGENT_STEPS, so main ended the run rather than letting it recurse.
+  // Not a provider failure — the provider was answering; the loop refused the
+  // next turn — which is why it is not LLM_BAD_RESPONSE and needs its own
+  // translatable message.
+  'LLM_AGENT_LIMIT',
 
   // IPC contract.
   'IPC_INVALID_REQUEST',
