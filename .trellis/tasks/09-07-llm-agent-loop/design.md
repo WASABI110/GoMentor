@@ -30,7 +30,7 @@ renderer (TeacherPanel)          main
 
 - 输入：用户消息 + 历史 + ChatContext（gameId/moveNumber，渲染层已发送）。
 - 循环：`chat(messages, tools)` → 消费 chunk 流（文本直通扇出；tool_call 增量累积——`openai-compatible.ts` 已按 index 碎片累积，runner 收 `done(finishReason: tool_calls)` 后得到完整调用集）→ zod 校验参数 → 逐个执行 → 追加 `role:'tool'` 消息 → 下一轮。
-- 上限：8 步（`MAX_AGENT_STEPS` 常量）。超限发 `done(finishReason: 'error')` + 本地生成一条可翻译的系统消息（新错误码 `LLM_AGENT_LIMIT`，进 `errors.ts` + i18n en/zh-CN）。
+- 上限：8 步（`MAX_AGENT_STEPS` 常量）。超限 runner 抛 `AppError('LLM_AGENT_LIMIT')`，`service.ts` 捕获后以 `llm:error` 事件收尾——与本节初稿写的 "`done(finishReason: 'error')` + 本地生成系统消息" 是有意偏离：`done` chunk 不携带错误载荷，要承载就得新增 chunk 种类，直接违反"IPC 面零新增"；且错误由渲染层按 `code` 经 `errors` 命名空间翻译本就是 error-handling spec 的既定路径（该码进 `errors.ts` + i18n en/zh-CN）。
 - 取消：现有 `AbortSignal` 贯穿——流中断时循环退出；工具执行体接收同一 signal（引擎查询可中断、库过滤可检查 signal）。
 - 重载安全：run 状态只存在于 main（现状即如此，渲染层仅凭 runId 关联）；渲染层重载后重新 `llm:getState` 类通道？——不新增：现有行为已约定 run 事件按 runId 扇出、重载丢事件不孤儿化进程，M3 保持同一约定（重载后教师面板显示"该回答已丢失"级别的现状语义，不升级为需求）。
 
@@ -54,8 +54,8 @@ M2 的 `service.setGame/setCursor` 绑定用户光标会话（焦点查询终止
 
 `send()` 入口处：`capabilities.toolsSupported` 三态——
 - `true` → 带工具启动 agent 循环；
-- `false` → 现状单轮（不发 `tools`）；
-- `null` → 先 `probeCapabilities()`（结果缓存于 provider，M1 已实现探测与缓存），再按结果分流。探测失败的兜底 = 视为 false（宁可降级不可死锁）。
+- `false` → 单轮（不发 `tools`）。单轮不是另一条代码路径：由同一个 `runAgentLoop` 承载（无 toolContext，收到 `tool_calls` 也按结束处理），循环对降级 run 退化为 M2 的单轮直通——"降级路径 wire 逐字节一致"由此靠构造成立，而非靠两份实现保持同步；core 编码器、集成层 `ChatRequest`、e2e 收到的 HTTP body 三层断言请求不含 `tools`。
+- `null` → 先 `probeCapabilities()`（结果缓存于 provider，M1 已实现探测与缓存），再按结果分流。探测失败的兜底 = 视为 false（宁可降级不可死锁）。附带后果：全新 provider 的第一次 send 先探测后作答，HTTP 层面是两个请求——`smoke.spec` 的请求断言因此从"单个含 prompt 的请求"改为有序对（第一个是探测，第二个才载 prompt 且不含 `tools`；探测消失或探测顶替真实回合，两者都应在此失败）。
 
 ### 5. 渲染层（R5）
 

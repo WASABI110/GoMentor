@@ -39,23 +39,22 @@ apps/desktop/src/main/
 ├── ipc/
 │   ├── register.ts         # handle() wrapper: schema validation + error mapping
 │   └── <domain>.handlers.ts
-├── katago/
-│   ├── process.ts          # spawn/kill/restart, stdio framing, health
-│   ├── engine-manager.ts   # engine pool, one active per analysis session
-│   ├── backend-detect.ts   # probe TensorRT → CUDA → OpenCL → Eigen
-│   └── config-writer.ts
+├── katago/                 # M2 reality (the block below this tree's original
+│   ├── process.ts          # plan named engine-manager/backend-detect/config-
+│   ├── service.ts          # writer; the built shape is one service owning
+│   ├── session.ts          # status, focus/sweep/agent query tiers, recovery)
+│   ├── locate.ts / config.ts / perspective.ts / coalesce.ts
+│   └── sweep.ts / backoff.ts / state-machine.ts / ring-buffer.ts
 ├── llm/
-│   ├── service.ts          # owns provider, runId issuance, stream fan-out
-│   ├── agent-loop.ts       # bounded ReAct: step budget, cancellation
-│   └── tools/              # tool implementations
-├── db/
-│   ├── index.ts            # better-sqlite3 connection, WAL, pragmas
-│   ├── migrations/         # 0001_init.sql, numbered, applied in a transaction
-│   └── repositories/       # one per aggregate
+│   ├── service.ts          # owns provider, runId issuance, stream fan-out,
+│   │                       # degrade tri-state at the send entry
+│   └── agent/              # M3: the bounded ReAct loop and its tools
+│       ├── runner.ts       # step budget (8), cancellation, tool-call assembly
+│       └── tools.ts        # registry: get_position / get_analysis / search_library
+├── db/                     # planned (M4) — not yet built
 ├── library/
-│   ├── import.ts           # drag-drop + folder scan → DB
-│   └── watcher.ts          # chokidar, debounced
-└── integrations/
+│   └── store.ts            # in-memory Map until M4; import lives in ipc/
+└── integrations/           # planned (M5) — not yet built
     ├── fox/                # 野狐 sync — inherently fragile, isolated
     └── readboard/          # physical board bridge, out-of-process
 

@@ -55,7 +55,7 @@ import { firstPage, launchApp, useLocalProvider } from './harness'
  * owns the run) finishes it and its events fail the store's `runId` filter on
  * arrival. No re-attachment machinery exists, by design (`chatStore.ts`'s
  * header records the reasoning); the unit suite pins the filter's half, and
- * the third describe below pins the live half: the reloaded panel stays
+ * the reload describe below pins the live half: the reloaded panel stays
  * empty, shows no error, and accepts a new question.
  *
  * ## Locale
@@ -211,6 +211,33 @@ function citeFromToolMessage(body: string): string {
   }
   const matched = (payload as { matched?: unknown }).matched
   if (typeof matched === 'number') {
+    // A search reply: cite the count and, when a match came back, the first
+    // summary's own outcome — the same quote-from-the-payload honesty as the
+    // winrate branch, applied to library summaries (A2). `result` on a
+    // summary is the parsed `gameResultSchema` object (winner/score/by), not
+    // the raw SGF string, so the fields are quoted as they arrived. An empty
+    // library falls through to the count alone.
+    const results = (payload as { results?: unknown }).results
+    const first = Array.isArray(results)
+      ? (results[0] as { result?: unknown } | undefined)
+      : undefined
+    const outcome = first?.result
+    if (
+      typeof outcome === 'object' &&
+      outcome !== null &&
+      typeof (outcome as { winner?: unknown }).winner === 'string' &&
+      typeof (outcome as { score?: unknown }).score === 'number'
+    ) {
+      const { winner, score, by } = outcome as {
+        winner: string
+        score: number
+        by?: string
+      }
+      return (
+        `${String(matched)} games matched; the newest: ${winner} wins by ${String(score)} ${by ?? ''}`.trim() +
+        '.'
+      )
+    }
     return `${String(matched)} games matched.`
   }
   return 'the tool replied.'
@@ -493,6 +520,105 @@ test.describe('the teacher agent loop against a tool-capable scripted model', ()
     expect(model.bodies[1]).toContain('get_analysis')
     expect(model.bodies[2]).toContain('tool_call_id')
     expect(model.bodies[2]).toContain(winrate)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// A2: the library tool's summaries reach the answer the same way the engine's
+// numbers do — cited from the tool message, matched as digits
+// ---------------------------------------------------------------------------
+
+test.describe('the teacher cites search_library summaries', () => {
+  let app: ElectronApplication
+  let page: Page
+  let model: ScriptedModel
+
+  test.beforeAll(async () => {
+    model = await startScriptedModel({
+      probe: 'tool_call',
+      firstCall: { name: 'search_library', arguments: '{"date":"2006"}' },
+    })
+    // Import-only: no record is opened, so nothing ever starts the engine —
+    // search_library reads the library, not KataGo. The nonexistent-binary
+    // override makes that engine-freedom structural (the board-render.spec
+    // lesson) rather than incidental: if an import ever did open a game, the
+    // app would degrade to `unavailable` instead of silently spawning a real
+    // engine on a machine with fetched resources.
+    app = await launchApp({
+      env: { GOMENTOR_KATAGO_BINARY: join(__dirname, 'no-such-engine') },
+    })
+    page = await firstPage(app)
+  })
+
+  test.afterAll(async () => {
+    await app.close()
+    await model.close()
+  })
+
+  test('the fixture is in the library', async () => {
+    const ok = await page.evaluate(async (filePath) => {
+      const result = await window.gomentor.library.import({ filePaths: [filePath] })
+      return result.ok && result.data.imported.length === 1
+    }, FIXTURE_SGF)
+    expect(ok).toBe(true)
+  })
+
+  test('the answer cites the summary the search returned', async () => {
+    await useLocalProvider(page, model.port)
+
+    await page.getByTestId('chat-input').fill('find my games from 2006')
+    await page.getByTestId('chat-send').click()
+
+    // The search step row, by the tool's own name.
+    const step = page.locator('[data-testid="chat-step"][data-tool="search_library"]')
+    await expect(step).toBeVisible()
+    await expect(step.getByTestId('chat-step-args')).toContainText('2006')
+
+    // The run completes into a real transcript turn.
+    await expect(page.getByTestId('chat-streaming')).toHaveCount(0)
+    await expect(page.getByTestId('teacher-panel')).toHaveAttribute('data-run-id', '')
+    const turns = page.getByTestId('chat-log').locator('li.chat-turn')
+    await expect(turns).toHaveCount(2)
+
+    // The cited summary fields, read where the step shows it: pick the
+    // fixture's parsed `RE[]` outcome out of the summary JSON the tool
+    // returned. `DT[2006-01-31]` matched the `{"date":"2006"}` criteria, so
+    // matched=1 and the first summary carries the typed result object
+    // (winner white, score 11 — `gameResultSchema`'s parse of `RE[W+11.0]`).
+    // Unlike A1's long analysis JSON, a one-hit search reply can fit inside
+    // the 120-character preview — the expand control exists only when
+    // something was cut — so the row is expanded when it can be and read
+    // whole when it already is.
+    const toggle = step.getByTestId('chat-step-result-toggle')
+    if ((await toggle.count()) > 0) await toggle.click()
+    const full = (await step.getByTestId('chat-step-result').innerText()).trim()
+    const winner = /"winner":"([a-z]+)"/.exec(full)?.[1]
+    const score = /"score":([0-9]+)/.exec(full)?.[1]
+    if (winner === undefined || score === undefined) {
+      throw new Error(`no game outcome in the tool output: ${full}`)
+    }
+    const citation = `${winner} wins by ${score}`
+
+    // The prose quotes the same summary fields (A1's cross-check shape: the
+    // markdown paragraphs only, never the turn's whole `innerText` — the step
+    // rows share the turn's DOM and would leak the values through their JSON).
+    const prose = (await turns.nth(1).locator('.chat-md p').allInnerTexts()).join(' ')
+    const flat = prose.replace(/\s+/g, ' ')
+    expect(flat).toContain('1 games matched')
+    expect(flat).toContain(citation)
+
+    // Wire order, composed end to end: the probe, then the agent turn
+    // offering the registry (search_library among the tools), then the
+    // grounded turn carrying the tool reply whose summary the answer matched.
+    expect(model.bodies).toHaveLength(3)
+    expect(model.bodies[0]).toContain('report_probe_ok')
+    expect(model.bodies[1]).toContain('search_library')
+    expect(model.bodies[2]).toContain('tool_call_id')
+    // The winner rides inside the tool message's `content` string, where the
+    // SDK's JSON serialisation escapes every quote — the body literally
+    // contains `\"winner\":\"white\"`. `'\\"'` is that escaped quote in a JS
+    // string, so this is an exact substring, not a pattern.
+    expect(model.bodies[2]).toContain(`\\"winner\\":\\"${winner}`)
   })
 })
 

@@ -14,6 +14,11 @@
  * mutated run whose test total differs from baseline broke collection rather
  * than behaviour, and is reported INVALID rather than counted as caught.
  *
+ * The exit code is the gate, not the summary. An escaped mutant or an invalid
+ * anchor exits non-zero: a report that only a human reading the output would
+ * act on is not a gate, and exit 0 under `*** ESCAPED ***` lines is exactly the
+ * green-that-isn't this harness exists to prevent.
+ *
  * One run covers both suites the mutants live in: the tool registry's and the
  * loop core's unit tests (`apps/desktop/test/unit/llm`) and the katago
  * session's pure builders (`apps/desktop/test/unit/katago`, where
@@ -422,3 +427,10 @@ const invalid = results.filter(
 console.log(
   `\n${String(results.length - escaped - invalid)}/${String(results.length)} caught, ${String(escaped)} escaped, ${String(invalid)} invalid`,
 )
+// An anchor that matched ≠1 site is drift in this harness, not a neutral
+// result, and an escaped mutant is the finding the whole run exists for. Either
+// fails the gate: the exit code is what CI and the stage checklist consume.
+if (escaped > 0 || invalid > 0) {
+  console.log('MUTATION GATE FAILED — an instrument reporting itself is not green.')
+  process.exit(1)
+}

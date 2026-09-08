@@ -14,17 +14,5 @@
     "running": "Running…",
     "expand": "Show the full result",
     "collapse": "Collapse"
-  },
-  "cancelled": "Response stopped.",
-  "noKey": {
-    "title": "The teacher is not set up yet",
-    "body": "Add an API key in settings, or point it at a local model server.",
-    "action": "Open settings"
-  },
-  "suggestion": {
-    "title": "Try asking",
-    "whyBad": "Why was that move a mistake?",
-    "whatNow": "What should I play now?",
-    "explainShape": "Explain this shape"
   }
 }

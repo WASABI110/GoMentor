@@ -11,6 +11,11 @@
  * and the result is reported as INVALID — never as "caught". A syntax error that
  * takes the whole file down would otherwise read as a perfect score.
  *
+ * The exit code is the gate, not the summary. An escaped mutant or an invalid
+ * anchor exits non-zero: a report that only a human reading the output would
+ * act on is not a gate, and exit 0 under `*** ESCAPED ***` lines is exactly the
+ * green-that-isn't this harness exists to prevent.
+ *
  * Two suites run per mutation: the protocol layer (`packages/core/test/katago`)
  * and the M2 lifecycle's pure decision modules (`apps/desktop/test/unit/katago`
  * and the `katago-*` unit files — config builder, locate policy and launch
@@ -840,3 +845,10 @@ const invalid = results.filter(
 console.log(
   `\n${String(results.length - escaped - invalid)}/${String(results.length)} caught, ${String(escaped)} escaped, ${String(invalid)} invalid`,
 )
+// An anchor that matched ≠1 site is drift in this harness, not a neutral
+// result, and an escaped mutant is the finding the whole run exists for. Either
+// fails the gate: the exit code is what CI and the stage checklist consume.
+if (escaped > 0 || invalid > 0) {
+  console.log('MUTATION GATE FAILED — an instrument reporting itself is not green.')
+  process.exit(1)
+}

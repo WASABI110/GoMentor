@@ -1,14 +1,14 @@
 # Architecture
 
-How GoMentor is actually built, as of M2.
+How GoMentor is actually built, as of M3.
 
 This is the living document. The planning artifacts under `.trellis/` are frozen at plan time and record _why_ decisions were made; this file records what the code does now, and it is the one to change when the code changes. Where the two disagree, the code is right and this file is stale — say so in the same commit that causes it.
 
 Two related documents: [`ipc-contract.md`](./ipc-contract.md) for the process boundary in detail, and [`adr/`](./adr/) for the decisions that are expensive to revisit.
 
-## What M2 is
+## What M3 is
 
-A desktop Go study application: open SGF files, step through games, read live KataGo analysis of the position — winrate, candidate moves with principal variations, per-point ownership, a whole-record winrate graph — and talk to an LLM teacher about it. No database, no accounts.
+A desktop Go study application: open SGF files, step through games, read live KataGo analysis of the position — winrate, candidate moves with principal variations, per-point ownership, a whole-record winrate graph — and talk to an LLM teacher that answers with real data: when a question needs the record, the engine's read of it, or the library, the teacher consults read-only tools mid-answer and cites what they returned. No database, no accounts.
 
 The engine is real now: a bundled KataGo (Eigen CPU build, one small net) is fetched at build time, packaged outside the asar, and spawned lazily by main when the first game opens. Absence survives as a _state_ regardless, because it still happens — macOS (no official KataGo binary is published for it), a dev checkout that has not run `pnpm fetch:katago`, and an engine past its restart budget all report `unavailable` or `failed`, and every other feature works in each. That is the M1 invariant, kept rather than retired: a build that disabled itself for lack of KataGo would pass a badge test and fail the requirement.
 
@@ -28,7 +28,7 @@ The engine is real now: a bundled KataGo (Eigen CPU build, one small net) is fet
 │  telemetry.ts    no-op until consent, call sites stable      │
 │  ipc/            register.ts (zod gate) + 5 handler modules  │
 │  katago/         engine lifecycle: locate, probe, recover    │
-│  llm/service.ts  run lifecycle, streams over events          │
+│  llm/            service (runs) + agent/ (loop, tools)       │
 │  library/store.ts in-memory Map (no SQLite yet)              │
 │  sgf/adapter.ts  bridges core's parser to the handlers       │
 └───────────────▲───────────────────────────┬──────────────────┘
@@ -170,14 +170,17 @@ The pure modules in that table are unit-tested and mutation-covered (`scripts/mu
 
 **Perspective is pinned, not inherited.** KataGo's reported perspective is config-dependent, while the shared contract wants `winrate` side-to-move and `scoreLead`/ownership positive-favours-black. `config.ts` pins `reportAnalysisWinratesAs = SIDETOMOVE` with no parameter to change it, and `perspective.ts` negates scoreLead and ownership when White is to move — `winrate` is spelled out as an explicit identity there, because "no flip needed" is itself a decision someone could wrongly optimise away. Left to defaults this is a silent sign error rendering plausible wrong numbers, the exact class of bug a green suite does not catch.
 
-### Two tiers of query
+### Three tiers of query
 
-| Tier  | Trigger                               | Feeds                                                                   |
-| ----- | ------------------------------------- | ----------------------------------------------------------------------- |
-| Focus | `engine:setGame` / `engine:setCursor` | candidates, PV hover, ownership overlay, the current readout            |
-| Sweep | `engine:setGame`, once per record     | the winrate graph, one settled point per position, filled progressively |
+| Tier  | Trigger                               | Feeds                                                                       |
+| ----- | ------------------------------------- | --------------------------------------------------------------------------- |
+| Focus | `engine:setGame` / `engine:setCursor` | candidates, PV hover, ownership overlay, the current readout                |
+| Sweep | `engine:setGame`, once per record     | the winrate graph, one settled point per position, filled progressively     |
+| Agent | an LLM tool call (`analyzeOnce`)      | `get_analysis`, returned to the caller — never emitted on `engine:analysis` |
 
-They run **concurrently** — KataGo time-slices threads between them — because a strict queue freezes the graph exactly when the user lingers on a position, which is the common case. Query ids are namespaced `focus:<n>` and `sweep:<move>`, and the renderer routes on the prefix. A new focus query terminates the in-flight one, and cursor streams are debounced ~50ms latest-wins, so holding an arrow key cannot queue two hundred engine queries. Sweep queries carry no ownership and only their final `complete` tick feeds the graph: an ownership tensor per move would roughly double sweep cost for pixels nobody renders.
+They run **concurrently** — KataGo time-slices threads between them — because a strict queue freezes the graph exactly when the user lingers on a position, which is the common case. Query ids are namespaced `focus:<n>`, `sweep:<move>`, and `agent:<n>`, and the renderer routes on the prefix. A new focus query terminates the in-flight one, and cursor streams are debounced ~50ms latest-wins, so holding an arrow key cannot queue two hundred engine queries. Sweep queries carry no ownership and only their final `complete` tick feeds the graph: an ownership tensor per move would roughly double sweep cost for pixels nobody renders.
+
+The agent tier is deliberately not "focus with another id". The teacher is asked "why was this move bad" exactly while the user is studying that move, and riding `setGame`/`setCursor` would terminate the user's own in-flight analysis — so `analyzeOnce` ([`service.ts`](../apps/desktop/src/main/katago/service.ts)) issues the query directly, the way the readiness probe does: a deferred keyed by id, resolved by the first well-formed complete line naming it, bounded by a deadline, touching nothing the session owns — not `desired`, not the sweep, not the cursor debounce. Its visit budget is a fixed 128 against the user-facing default cap of 500: the teacher quotes numbers rather than needing a converged readout, and the smaller budget is what keeps a tool query from spending the user's latency. The result goes back to the tool that asked; the renderer never sees it.
 
 ### Crash recovery
 
@@ -211,9 +214,11 @@ While queries are in flight, stdout silence beyond a 30s watchdog trips terminat
 Two properties that shape every test touching this layer:
 
 - **`LLM_NO_KEY` throws at provider _construction_.** So the cloud path is unusable in any keyless environment, CI included. `kind: 'local'` needs no credential, which is what makes the LLM path testable without secrets.
-- **`probeCapabilities` runs on first connect** and records whether tool calls actually work. Tool support in Ollama/LM Studio varies **by model**, not by server, so it cannot be inferred from configuration. Recording it lets M3's agent loop fall back to a no-tools prompt instead of failing at the first dispatch.
+- **`probeCapabilities` runs on first connect** and records whether tool calls actually work. Tool support in Ollama/LM Studio varies **by model**, not by server, so it cannot be inferred from configuration. Recording it is what lets the agent loop fall back to a no-tools prompt instead of failing at the first dispatch.
 
-The agent loop is deferred to M3 but its boundary is already fixed: it belongs in **main**, because tools need database, engine, and filesystem access, and a renderer reload must not orphan an in-flight multi-step run.
+The agent loop lives in **main** ([`llm/agent/runner.ts`](../apps/desktop/src/main/llm/agent/runner.ts)) — its tools need engine and library access, and a renderer reload must not orphan an in-flight multi-step run. It is a bounded loop: `chat()` → forward every chunk as `llm:delta` → on a `tool_calls` finish, validate the accumulated arguments, execute the calls serially, append the `role: 'tool'` replies, and turn again. **Eight provider round trips per run** is the hard cap (`MAX_AGENT_STEPS`); past it the run ends with `LLM_AGENT_LIMIT` rather than recursing on a model that answers every turn with another tool call. [`llm/agent/tools.ts`](../apps/desktop/src/main/llm/agent/tools.ts) is a registry of three read-only tools — `get_position`, `get_analysis` (the agent engine tier above), `search_library` — whose wire schemas derive from the registry itself, so there is one source of truth for what the model is offered. Tool-level failures never end the run: an invalid argument or an unavailable engine becomes an `isError` result the model can read and self-correct from. Exactly one error class escapes a tool, cancellation (`LLM_ABORTED`), because a cancelled run must not be answered with another provider request.
+
+**Degrading is a tri-state resolved before the run starts.** Tool support is `true`, `false`, or `null` (never probed). `true` starts the loop with tools; `false` runs the single-shot path; `null` probes first and degrades if the probe could not measure — sending a `tools` array to a model that cannot answer it produces a reply that silently ignores the request, so degrading is the outcome that cannot deadlock. The single-shot path is not a second implementation: it is the same `runAgentLoop` with no tools on the wire, where it degenerates to the pre-M3 pass-through, so "the degraded request is byte-identical" is true by construction — asserted at the encoder, at the `ChatRequest`, and at the HTTP body the server receives.
 
 ## Settings and secrets
 
@@ -306,6 +311,8 @@ The technique per layer is chosen against a specific failure mode, not by habit.
 | KataGo process         | **Real spawned child** speaking GTP and the analysis protocol                 | Exercises actual pipes, framing, and exit handling. Mocks would test the mock                                               |
 | Engine lifecycle       | The same fake with fault flags (`--crash-after`, `--hang-on`, `--garbage-on`) | Recovery is only real against a child that can die, hang, or emit garbage on cue                                            |
 | Engine decision cores  | Unit + mutation harness (`scripts/mutate-katago.mts`)                         | Coalescer, sweep ledger, backoff, state machine, perspective flip — the sign-and-bound class a green suite otherwise misses |
+| Agent loop core        | Unit + mutation harness (`scripts/mutate-llm.mts`)                            | Step cap, degrade tri-state, tool-argument parsing, search filtering — same sign-and-bound class, LLM side                  |
+| Agent loop end-to-end  | Scripted SSE model server over real HTTP, selected via `settings:set`         | The loop, the probe, the tools, and the step rows in the panel — with zero main-process stubs                               |
 | Live analysis pipeline | e2e against `out/` with the fake selected via `GOMENTOR_KATAGO_BINARY`        | The whole pipe — spawn, probe, query, render — with no real engine, which a CI runner cannot have                           |
 | Handlers               | Stubbed `ipcMain`, invoke each channel, validate against schema               | Catches handler/schema drift without a UI                                                                                   |
 | Settings               | Write → restart-simulate → read, plus unknown-key survival                    | Forward-compat is a correctness property                                                                                    |

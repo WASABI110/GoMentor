@@ -32,14 +32,14 @@ Stage 1 实际还触碰了（验证确认合理、增量、不开 A9 面）：`p
 2. `AGENT_QUERY_VISITS=128` + `probeDeadlineMs=15s` 的自终止边界远小于 30s 看门狗（CPU 饥饿间接路径的算术余量）——若 Stage 2+ 调大任一值，需重估该余量。
 3. harness 退出策略统一（mutate-llm 与 mutate-katago 对 ANCHOR/INVALID 均只计入 summary 不非零退出）留到 Stage 4 一并处置。
 
-## Stage 2 — Agent runner（R1/R3/R4）
+## Stage 2 — Agent runner（R1/R3/R4）✅（2026-09-08，check 5 修复含原型污染，verify PASS，提交 4800187）
 
-- [ ] `main/llm/agent/runner.ts` — 循环状态机：chunk 流消费（tool_call 增量累积，`done(tool_calls)` 触发执行）、串行执行、历史追加、上限 8（`MAX_AGENT_STEPS`）、AbortSignal 贯穿
-- [ ] 纯核拆分（步进决策/上限判定）供变异测试；`scripts/mutate-llm.mts` 建立（沿用 `mutate-katago.mts` 的基线门禁模式）
-- [ ] 降级三态分流（true/false/null→探测→缓存兜底 false）；降级路径 wire 层无 `tools` 参数——测试断言
-- [ ] `llm/service.ts` 接入：send 入口按能力分流；runId/cancel/fanout 语义不变
-- [ ] `LLM_AGENT_LIMIT` 错误码：`errors.ts` + `shared` schema + i18n（en/zh-CN 实译）
-- [ ] 集成：fake LLM（脚本化 tool_calls 序列，`ChatChunk` 形状直供）驱动真实 runner——闭环 / 上限 / 取消 / 降级 / 参数自纠 / 工具中取消
+- [x] `main/llm/agent/runner.ts` — 循环状态机：chunk 流消费（tool_call 增量累积，`done(tool_calls)` 触发执行）、串行执行、历史追加、上限 8（`MAX_AGENT_STEPS`）、AbortSignal 贯穿
+- [x] 纯核拆分（步进决策/上限判定）供变异测试；`scripts/mutate-llm.mts` 建立（沿用 `mutate-katago.mts` 的基线门禁模式）
+- [x] 降级三态分流（true/false/null→探测→缓存兜底 false）；降级路径 wire 层无 `tools` 参数——测试断言
+- [x] `llm/service.ts` 接入：send 入口按能力分流；runId/cancel/fanout 语义不变
+- [x] `LLM_AGENT_LIMIT` 错误码：`errors.ts` + `shared` schema + i18n（en/zh-CN 实译）
+- [x] 集成：fake LLM（脚本化 tool_calls 序列，`ChatChunk` 形状直供）驱动真实 runner——闭环 / 上限 / 取消 / 降级 / 参数自纠 / 工具中取消
 
 **门禁证据**：`out/` 构建 + 启动，真实 app + fake LLM 走通一次闭环。验收：R1/R3/R4 骨架。
 
@@ -55,11 +55,11 @@ Stage 1 实际还触碰了（验证确认合理、增量、不开 A9 面）：`p
 1. `teacher.json` 有 9 个 M1 遗留死键（cancelled/noKey.*/suggestion.*，从未有消费方）——删除或接线，并考虑 i18n 门禁增长消费检查（"键齐值同不是翻译"的同类教训）。
 2. 教师面板 spec 的 `-g` 单测过滤会误导（describe 顺序设计）——重验证必须跑整个 describe（已记录在 spec 头）。
 
-## Stage 4 — 最终门禁
+## Stage 4 — 最终门禁 ✅（2026-09-08，verify A1–A7 PASS，A2 缺口当场关闭）
 
-- [ ] A1–A7 全量核对（`gomentor-verify` 只读判定，逐条记录到任务 `final-gate.md`——M2 模式）
-- [ ] `docs/architecture.md` + `docs/ipc-contract.md` 更新到 M3 现实；`.trellis/spec/` 沉淀本里程碑证明的教训
-- [ ] 三平台 CI 绿；打包启动门禁照常执行（引擎/打包面无回退）
+- [x] A1–A7 全量核对（`gomentor-verify` 只读判定，逐条记录到任务 `final-gate.md`——M2 模式）
+- [x] `docs/architecture.md` 更新到 M3 现实（ipc-contract.md 经核无需改动——M3 零新增 IPC 面）；spec 沉淀 4 条新教训 + directory-structure 漂移修正
+- [x] 三平台 CI 绿；打包启动门禁照常执行（本地 42/42 e2e 含真引擎打包启动；CI 待推送验证）
 
 ## 风险文件 / 回滚点
 
@@ -74,5 +74,5 @@ Stage 1 实际还触碰了（验证确认合理、增量、不开 A9 面）：`p
 
 ## Pre-start 检查
 
-- [ ] `implement.jsonl` / `check.jsonl` 策展真实条目（spec + research；sub-agent 平台门槛）
-- [ ] 最终规划总结经用户明确批准后 `task.py start`
+- [x] `implement.jsonl` / `check.jsonl` 策展真实条目（spec + research；sub-agent 平台门槛）
+- [x] 最终规划总结经用户明确批准后 `task.py start`
