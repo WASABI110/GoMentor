@@ -9,6 +9,12 @@
     "user": "You",
     "assistant": "Teacher"
   },
+  "steps": {
+    "title": "What the teacher checked",
+    "running": "Running…",
+    "expand": "Show the full result",
+    "collapse": "Collapse"
+  },
   "cancelled": "Response stopped.",
   "noKey": {
     "title": "The teacher is not set up yet",

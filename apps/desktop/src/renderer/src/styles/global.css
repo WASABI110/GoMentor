@@ -460,6 +460,59 @@ body {
   white-space: pre-wrap;
 }
 
+/* Tool steps under an assistant turn (M3 Stage 3). One row per tool call:
+   name, then arguments, then what came back. Payloads are data written by the
+   model or main, so they keep the monospace/data treatment and never wrap into
+   the prose column. */
+.chat-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0 0 8px;
+  list-style: none;
+}
+
+.chat-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-step__name {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text);
+}
+
+.chat-step__args,
+.chat-step__result code {
+  padding: 1px 4px;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  background: var(--surface);
+  border-radius: 3px;
+}
+
+.chat-step__result {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.chat-step__result--error code {
+  color: var(--color-error-text);
+}
+
+.chat-step__toggle {
+  padding: 0 4px;
+  font-size: 11px;
+}
+
 /* Rendered markdown inside an assistant turn. `white-space` is reset because
    remark preserves source line breaks as real elements; keeping `pre-wrap`
    here would double-space paragraphs that the parser already laid out. */

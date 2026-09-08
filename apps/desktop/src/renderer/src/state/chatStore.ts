@@ -23,6 +23,17 @@ import type {
  * abandoned answer into the middle of the new one — and it looks like the model
  * produced word salad rather than like a bug in this file.
  *
+ * ## A renderer reload loses the run, on purpose
+ *
+ * The run is owned by main (the agent loop and its tools live there), but its
+ * identity lives in *this* store's `activeRunId`, which dies with the window.
+ * After a reload every `llm:delta` for the old run fails the filter above —
+ * including the terminal one — so the panel shows its initial empty state and
+ * the in-flight answer is gone from view. Main still finishes (or cancels) the
+ * run; nothing is orphaned. Re-attaching a new window to an old runId would
+ * need main to buffer and replay a stream, which no milestone has asked for;
+ * the accepted cost is that a reload during an answer loses that answer.
+ *
  * ## The streaming text is accumulated here, not in React state
  *
  * `state-management.md` §Common Mistakes: token deltas arrive faster than React
@@ -38,15 +49,35 @@ import type {
  * consumer accumulates". Mid-stream that text is *not valid JSON* — parsing each
  * fragment would throw on almost every chunk. The renderer only ever displays which
  * tool is running; whoever executes the call parses the completed arguments against
- * that tool's own schema, per `toolCallSchema`.
+ * that tool's own schema, per `toolCallSchema`. The `tool_result` chunk is stored
+ * the same way — verbatim, whole, unparsed. The M3 agent loop in main sends the
+ * *complete* outcome in one chunk (the model reads the same text), so there is
+ * nothing to accumulate; the ~120-character step preview is applied where it is
+ * displayed, never to the stored state.
  */
 
-/** A tool call being streamed. `arguments` is raw text until the run completes. */
-export interface StreamingToolCall {
+/**
+ * One tool step, shown as a row under the assistant turn that requested it.
+ *
+ * The same shape serves both halves of the display: while the run streams, the
+ * rows live in `toolCalls` and fill in incrementally; at `llm:done` they are
+ * filed under the finished message's id in `stepsByMessage`, so the transcript
+ * keeps showing what the teacher did after the answer is complete. A step that
+ * vanishes the moment `done` arrives would tell the user the tool ran only
+ * while it was running.
+ */
+export interface ToolStep {
   id: string
   name: string
   /** Concatenated `argumentsDelta` fragments. Not parsed, not necessarily JSON yet. */
   argumentsText: string
+  /**
+   * The full result content, from the `tool_result` chunk matching this call's
+   * id. Absent until then. Held whole — the ~120-character bound is a display
+   * decision in the component, not a state decision here; truncating in the
+   * store would make "expand" a lie about data that did arrive.
+   */
+  resultText?: string
 }
 
 interface ChatState {
@@ -58,7 +89,13 @@ interface ChatState {
   /** The answer so far for `activeRunId`. Cleared when the run ends. */
   streaming: string
   /** Tool calls seen in the current run, in arrival order. */
-  toolCalls: StreamingToolCall[]
+  toolCalls: ToolStep[]
+  /**
+   * Steps of finished turns, keyed by the assistant message that requested
+   * them. Populated at `llm:done` from `toolCalls`, so a completed turn keeps
+   * showing its steps after the streaming buffer is cleared.
+   */
+  stepsByMessage: Record<string, readonly ToolStep[]>
   /** Last failure, from the send itself or from an `llm:error` event. */
   error: ErrorEnvelope | null
 
@@ -124,6 +161,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   status: 'idle',
   streaming: '',
   toolCalls: [],
+  stepsByMessage: {},
   error: null,
 
   send: async (content, context) => {
@@ -224,12 +262,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return
       }
 
-      case 'tool_result':
-        // Recorded as status only in M1. The result's content belongs to the agent
-        // loop in main, which decides what to do next; the renderer shows that a
-        // tool ran.
-        set({ status: 'streaming' })
+      case 'tool_result': {
+        // The result's content belongs to the agent loop in main, which decides
+        // what to do next with it; the renderer keeps it so the step row can show
+        // what came back. Filed against the call id the chunk names — a result
+        // with no matching call is dropped rather than invented, the same way a
+        // chunk from a foreign run is.
+        const matched = state.toolCalls.some((call) => call.id === chunk.toolCallId)
+        set({
+          toolCalls: matched
+            ? state.toolCalls.map((call) =>
+                call.id === chunk.toolCallId
+                  ? // Held whole; the component decides how much of it to show.
+                    { ...call, resultText: chunk.content }
+                  : call,
+              )
+            : state.toolCalls,
+          status: 'streaming',
+        })
         return
+      }
 
       case 'done':
         // A `done` *chunk* is not the `llm:done` event. Both can arrive; the run is
@@ -249,8 +301,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
+    const message = assistantMessage(state)
     set({
-      messages: [...state.messages, assistantMessage(state)],
+      messages: [...state.messages, message],
+      // The run's steps are filed under the turn that asked for them, so the
+      // transcript keeps showing what the teacher did after the answer lands.
+      // Spread rather than assigned: under `exactOptionalPropertyTypes` a run
+      // with no tools must not write an empty entry against its message.
+      ...(state.toolCalls.length > 0
+        ? { stepsByMessage: { ...state.stepsByMessage, [message.id]: state.toolCalls } }
+        : {}),
       activeRunId: null,
       status: 'done',
       streaming: '',
@@ -281,6 +341,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       status: 'idle',
       streaming: '',
       toolCalls: [],
+      stepsByMessage: {},
       error: null,
     })
   },

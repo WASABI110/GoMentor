@@ -5,6 +5,7 @@ import type { ChatMessage } from '@gomentor/shared'
 import { useChatStore } from '../state/chatStore'
 import { useGameStore } from '../state/gameStore'
 import { ErrorNotice } from './ErrorNotice'
+import { ToolSteps } from './ToolSteps'
 import { Button } from './ui'
 
 /**
@@ -67,11 +68,17 @@ export function TeacherChat(): React.JSX.Element {
   const error = useChatStore((state) => state.error)
   const send = useChatStore((state) => state.send)
   const cancel = useChatStore((state) => state.cancel)
+  const toolCalls = useChatStore((state) => state.toolCalls)
+  const stepsByMessage = useChatStore((state) => state.stepsByMessage)
 
   const gameId = useGameStore((state) => state.game?.id)
   const cursor = useGameStore((state) => state.cursor)
 
-  const busy = status === 'streaming'
+  // `awaiting_tool` is part of busy: while a tool runs, the run is still
+  // producing this answer, so the composer must keep showing Stop — and `send`
+  // already refuses a second send in that state, so an enabled Send button
+  // there would be a control that does nothing when clicked.
+  const busy = status === 'streaming' || status === 'awaiting_tool'
 
   function submit(): void {
     const content = draft.trim()
@@ -105,6 +112,10 @@ export function TeacherChat(): React.JSX.Element {
           <span className="chat-turn__content">{message.content}</span>
         ) : (
           <div className="chat-turn__content chat-md">
+            {/* The steps this turn's run performed, filed here by the store at
+                `llm:done`. Above the prose: the answer is grounded in them, so
+                the reading order is what the teacher did, then what it said. */}
+            <ToolSteps steps={stepsByMessage[message.id] ?? []} />
             <ReactMarkdown components={markdownComponents}>
               {message.content}
             </ReactMarkdown>
@@ -114,20 +125,32 @@ export function TeacherChat(): React.JSX.Element {
     )
   }
 
+  // The streaming turn exists while text is arriving *or* while the run is
+  // working through tool calls that have produced no text yet — a tool-only
+  // stretch is exactly when the step rows are the only visible progress.
+  const showStreaming = streaming !== '' || toolCalls.length > 0
+
   return (
     <>
       {error !== null && <ErrorNotice error={error} />}
 
-      {messages.length === 0 && streaming === '' ? (
+      {messages.length === 0 && !showStreaming ? (
         <p className="placeholder" data-testid="teacher-empty">
           {t('teacher:empty')}
         </p>
       ) : (
         <ol className="chat-log" data-testid="chat-log">
           {messages.map((message) => turn(message))}
-          {streaming !== '' && (
+          {showStreaming && (
             <li className="chat-turn chat-turn--assistant" data-testid="chat-streaming">
               <span className="chat-turn__role">{t('teacher:role.assistant')}</span>
+              {/*
+                The run's steps while they happen: a row appears the moment the
+                model starts a tool call (arguments still arriving in fragments)
+                and its result fills in when the loop reports it. The same rows
+                move under the finished message at `llm:done`.
+              */}
+              <ToolSteps steps={toolCalls} />
               {/*
                 The partial answer goes through the same renderer as a finished
                 one. Parsing half-written markdown is well-defined - an unclosed
@@ -135,17 +158,19 @@ export function TeacherChat(): React.JSX.Element {
                 would make the text visibly "snap" at `llm:done` for reasons the
                 user cannot attribute to anything.
               */}
-              <div className="chat-turn__content chat-md">
-                <ReactMarkdown components={markdownComponents}>
-                  {streaming}
-                </ReactMarkdown>
-              </div>
+              {streaming !== '' && (
+                <div className="chat-turn__content chat-md">
+                  <ReactMarkdown components={markdownComponents}>
+                    {streaming}
+                  </ReactMarkdown>
+                </div>
+              )}
             </li>
           )}
         </ol>
       )}
 
-      {busy && streaming === '' && (
+      {busy && !showStreaming && (
         <p className="placeholder" data-testid="teacher-thinking">
           {t('teacher:thinking')}
         </p>

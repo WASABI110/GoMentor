@@ -48,6 +48,10 @@ function toolCallChunk(id: string, name: string, argumentsDelta: string): ChatCh
   return chatChunkSchema.parse({ type: 'tool_call', id, name, argumentsDelta })
 }
 
+function toolResultChunk(toolCallId: string, content: string): ChatChunk {
+  return chatChunkSchema.parse({ type: 'tool_result', toolCallId, content })
+}
+
 interface BridgeCalls {
   sendMessage: unknown[]
   cancel: unknown[]
@@ -99,6 +103,7 @@ beforeEach(() => {
     status: 'idle',
     streaming: '',
     toolCalls: [],
+    stepsByMessage: {},
     error: null,
   })
 })
@@ -239,6 +244,37 @@ describe('a foreign runId is dropped, never appended', () => {
   })
 })
 
+describe('a run that started before a reload is dropped in its entirety (A5 renderer half)', () => {
+  // No `startRun`, deliberately: the reset in `beforeEach` above *is* the
+  // post-reload state. A reload recreates the store module, so `activeRunId`
+  // is null while main — which owns the run — keeps driving it: every
+  // `llm:delta` and the terminal `llm:done` for the old run cross the bridge
+  // and must fail the filter, leaving the panel's initial empty state. That
+  // is the accepted M3 semantics (`chatStore.ts`'s header records it): no
+  // re-attachment machinery, no orphaned process, no partial message held
+  // open with no spinner. The e2e suite pins the live half of the same claim
+  // (`teacher-agent.spec.ts`, reload describe).
+  it("drops the lost run's whole event grammar — tool chunks, text, and the terminal event", () => {
+    useChatStore
+      .getState()
+      .receiveChunk(RUN, toolCallChunk('c1', 'get_analysis', '{"moveNumber":5}'))
+    useChatStore
+      .getState()
+      .receiveChunk(RUN, toolResultChunk('c1', '{"winrate":0.537}'))
+    useChatStore.getState().receiveChunk(RUN, textChunk('the answer'))
+    useChatStore.getState().finishRun(RUN, 'stop')
+
+    const state = useChatStore.getState()
+    expect(state.messages).toEqual([])
+    expect(state.streaming).toBe('')
+    expect(state.toolCalls).toEqual([])
+    expect(state.stepsByMessage).toEqual({})
+    expect(state.activeRunId).toBeNull()
+    expect(state.status).toBe('idle')
+    expect(state.error).toBeNull()
+  })
+})
+
 describe('streaming text', () => {
   it('accumulates deltas in order', async () => {
     await startRun()
@@ -371,6 +407,123 @@ describe('tool calls accumulate as text', () => {
 
     // A leftover call would attach the previous turn's tool to this one.
     expect(useChatStore.getState().toolCalls).toEqual([])
+  })
+})
+
+describe('tool results fill the matching step (M3 Stage 3)', () => {
+  const RESULT =
+    '{"gameId":"g1","moveNumber":10,"winrate":0.5371,"candidates":[{"move":"D4"}]}'
+
+  /** Drives one call to the point where its result can arrive. */
+  async function startCall(): Promise<void> {
+    await startRun()
+    useChatStore.getState().receiveChunk(RUN, toolCallChunk('c1', 'get_analysis', '{}'))
+  }
+
+  it('stores the result whole against the call it names', async () => {
+    await startCall()
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('c1', RESULT))
+
+    const calls = useChatStore.getState().toolCalls
+    expect(calls[0]?.resultText).toBe(RESULT)
+  })
+
+  it('does not truncate the stored result — the bound is a display decision', async () => {
+    await startCall()
+    const long = 'x'.repeat(400)
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('c1', long))
+
+    // Truncating here would make the step's expand control a lie about data
+    // that did arrive; the ~120-character preview belongs to the component.
+    expect(useChatStore.getState().toolCalls[0]?.resultText).toHaveLength(400)
+  })
+
+  it('drops a result whose toolCallId matches no call', async () => {
+    await startRun()
+    useChatStore.getState().receiveChunk(RUN, toolCallChunk('c1', 'get_analysis', '{}'))
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('ghost', RESULT))
+
+    // Inventing a row for an unmatched id would show a tool that never ran;
+    // the same rule that drops a foreign run's chunks drops this.
+    expect(useChatStore.getState().toolCalls).toHaveLength(1)
+    expect(useChatStore.getState().toolCalls[0]?.resultText).toBeUndefined()
+  })
+
+  it('ignores a result from another run', async () => {
+    await startCall()
+    useChatStore.getState().receiveChunk(OTHER_RUN, toolResultChunk('c1', RESULT))
+
+    expect(useChatStore.getState().toolCalls[0]?.resultText).toBeUndefined()
+  })
+
+  it("files the run's steps under the finished message and clears the buffer", async () => {
+    await startCall()
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('c1', RESULT))
+    useChatStore
+      .getState()
+      .receiveChunk(RUN, textChunk('The move loses about half a point.'))
+    useChatStore.getState().finishRun(RUN, 'stop')
+
+    const state = useChatStore.getState()
+    expect(state.messages).toHaveLength(2)
+    const assistant = state.messages[1]
+    if (assistant === undefined) throw new Error('no assistant message')
+
+    // The transcript keeps showing what the teacher did after the answer lands:
+    // steps that vanished at `llm:done` would only ever have been visible while
+    // they were in progress.
+    const steps = state.stepsByMessage[assistant.id]
+    if (steps === undefined) throw new Error('no steps filed for the finished message')
+    expect(steps).toHaveLength(1)
+    expect(steps[0]?.name).toBe('get_analysis')
+    expect(steps[0]?.argumentsText).toBe('{}')
+    expect(steps[0]?.resultText).toBe(RESULT)
+    expect(state.toolCalls).toEqual([])
+  })
+
+  it('writes no steps entry for a run that used no tool', async () => {
+    await startRun()
+    useChatStore.getState().receiveChunk(RUN, textChunk('A plain answer.'))
+    useChatStore.getState().finishRun(RUN, 'stop')
+
+    const assistant = useChatStore.getState().messages[1]
+    if (assistant === undefined) throw new Error('no assistant message')
+    // Optional-shaped state stays absent rather than accumulating an empty
+    // entry against every tool-less message.
+    expect(useChatStore.getState().stepsByMessage[assistant.id]).toBeUndefined()
+  })
+
+  it("keeps finished turns' steps when a later run is cancelled", async () => {
+    await startCall()
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('c1', RESULT))
+    useChatStore.getState().receiveChunk(RUN, textChunk('Answer one.'))
+    useChatStore.getState().finishRun(RUN, 'stop')
+    const first = useChatStore.getState().messages[1]
+    if (first === undefined) throw new Error('no assistant message')
+
+    vi.unstubAllGlobals()
+    stubBridge({})
+    await useChatStore.getState().send('second question')
+    useChatStore
+      .getState()
+      .receiveChunk(RUN, toolCallChunk('c2', 'search_library', '{}'))
+    await useChatStore.getState().cancel()
+
+    // A cancel discards the run it cancelled — including its steps — but must
+    // not reach back into turns that already finished.
+    expect(useChatStore.getState().stepsByMessage[first.id]).toHaveLength(1)
+    expect(useChatStore.getState().toolCalls).toEqual([])
+  })
+
+  it('clear resets the steps of finished turns', async () => {
+    await startCall()
+    useChatStore.getState().receiveChunk(RUN, toolResultChunk('c1', RESULT))
+    useChatStore.getState().finishRun(RUN, 'stop')
+    expect(Object.keys(useChatStore.getState().stepsByMessage)).toHaveLength(1)
+
+    useChatStore.getState().clear()
+
+    expect(useChatStore.getState().stepsByMessage).toEqual({})
   })
 })
 

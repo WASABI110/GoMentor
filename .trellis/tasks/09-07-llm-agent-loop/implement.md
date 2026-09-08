@@ -43,13 +43,17 @@ Stage 1 实际还触碰了（验证确认合理、增量、不开 A9 面）：`p
 
 **门禁证据**：`out/` 构建 + 启动，真实 app + fake LLM 走通一次闭环。验收：R1/R3/R4 骨架。
 
-## Stage 3 — 渲染层工具步骤（R5）
+## Stage 3 — 渲染层工具步骤（R5）✅（2026-09-08，check 修复空断言+死键，verify PASS）
 
-- [ ] `TeacherPanel` 消息流消费 `tool_call`/`tool_result` chunk：步骤行（工具名 + 参数摘要）+ 结果摘要（~120 字符可展开）
-- [ ] i18n：`teacher.json` 工具步骤键（zh-CN + en 实译——"键齐值同"不是翻译，门禁会抓）
-- [ ] 重载后事件丢失的现状语义确认（不孤儿化；面板呈现"回答已丢失"级别信息）
+- [x] `TeacherPanel` 消息流消费 `tool_call`/`tool_result` chunk：步骤行（工具名 + 参数摘要）+ 结果摘要（~120 字符可展开）
+- [x] i18n：`teacher.json` 工具步骤键（zh-CN + en 实译——"键齐值同"不是翻译，门禁会抓）
+- [x] 重载后事件丢失的现状语义确认（不孤儿化；面板呈现空白态——已在 chatStore 头注释与 spec 头成文；main 经真实 HTTP 计数断言跑完 run）
 
-**门禁证据**：e2e——fake LLM 注入（env seam，M2 `GOMENTOR_KATAGO_BINARY` 同模式）+ fake 引擎，教师面板出现工具步骤且最终回答引用真实数字。验收：R5、A1。
+**门禁证据**：e2e 走真实路径——本地脚本化 SSE 模型服务器（`settings:set` 指向，零主进程改动）+ fake 引擎（`GOMENTOR_KATAGO_BINARY`），教师面板出现工具步骤且最终回答引用真实数字（交叉核对经破坏性验证有牙）。验收：R5、A1/A3/A5 渲染层半边。verify PASS（2026-09-08）。
+
+**Stage 4 处置项（Stage 3 verify notes）**：
+1. `teacher.json` 有 9 个 M1 遗留死键（cancelled/noKey.*/suggestion.*，从未有消费方）——删除或接线，并考虑 i18n 门禁增长消费检查（"键齐值同不是翻译"的同类教训）。
+2. 教师面板 spec 的 `-g` 单测过滤会误导（describe 顺序设计）——重验证必须跑整个 describe（已记录在 spec 头）。
 
 ## Stage 4 — 最终门禁
 

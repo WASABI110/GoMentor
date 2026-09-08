@@ -9,6 +9,12 @@
     "user": "我",
     "assistant": "教师"
   },
+  "steps": {
+    "title": "教师查阅了对局数据",
+    "running": "正在执行…",
+    "expand": "展开完整结果",
+    "collapse": "收起"
+  },
   "cancelled": "已停止回答。",
   "noKey": {
     "title": "还没有配置 AI 教师",
