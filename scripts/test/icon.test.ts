@@ -220,5 +220,11 @@ describe('the artifacts are where the packager looks', () => {
 
     const ico = readFileSync(join(BUILD_DIR, 'icon.ico'))
     expect(ico.equals(encodeIco(ICO_SIZES.map((size) => drawIcon(size))))).toBe(true)
-  })
+  }, // The assertion is byte-identity, not speed: this re-rasterises a 1024px
+  // canvas plus every ICO size and zlib-encodes each. That is CPU work a
+  // cold 2-core CI runner does in >5s (measured: windows-latest timed out
+  // at the default on 2026-09-08 while dev machines and ubuntu/macos passed
+  // — the first push to surface it), so the budget is raised to 60s rather
+  // than letting runner speed masquerade as a regression.
+  60_000)
 })
