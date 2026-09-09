@@ -211,6 +211,15 @@ describe('the artifacts are where the packager looks', () => {
     expect(widths.size).toBe(ICO_SIZES.length)
   })
 
+  // The assertion below is byte-identity, not speed: it re-rasterises a
+  // 1024px canvas plus every ICO size and zlib-encodes each — CPU work a
+  // cold 2-core runner does in >5s (measured: windows-latest timed out at
+  // the default on 2026-09-08 while dev machines and ubuntu/macos passed;
+  // the first push to surface it), so the budget is 60s rather than letting
+  // runner speed masquerade as a regression. The explanation lives ABOVE the
+  // call on purpose: a multi-line comment in a call's trailing-argument
+  // region is one prettier re-flows non-idempotently (each `--write`
+  // rotates the lines), which `format:check` then rejects.
   it('is byte-identical to a fresh generation', () => {
     // Proves the committed artifacts came from the committed code — the property that
     // makes reviewing `scripts/icon.ts` equivalent to reviewing the icon itself. If
@@ -220,11 +229,5 @@ describe('the artifacts are where the packager looks', () => {
 
     const ico = readFileSync(join(BUILD_DIR, 'icon.ico'))
     expect(ico.equals(encodeIco(ICO_SIZES.map((size) => drawIcon(size))))).toBe(true)
-  }, // The assertion is byte-identity, not speed: this re-rasterises a 1024px
-  // canvas plus every ICO size and zlib-encodes each. That is CPU work a
-  // cold 2-core CI runner does in >5s (measured: windows-latest timed out
-  // at the default on 2026-09-08 while dev machines and ubuntu/macos passed
-  // — the first push to surface it), so the budget is raised to 60s rather
-  // than letting runner speed masquerade as a regression.
-  60_000)
+  }, 60_000)
 })
