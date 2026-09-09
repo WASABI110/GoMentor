@@ -66,3 +66,29 @@ Closed M2. Real engine fetched and run for the first time: KataGo v1.18.1 requir
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: M3 complete: LLM agent loop — tools, runner, renderer steps, A1-A7 green on all three OS
+
+**Date**: 2026-09-09
+**Task**: M3 complete: LLM agent loop — tools, runner, renderer steps, A1-A7 green on all three OS
+**Branch**: `master`
+
+### Summary
+
+Delivered M3 end to end. Stage 1: read-only tool registry (ToolSchema from zod, isError self-correction, registered codes only) + get_position/search_library/get_analysis wired to the engine's new analyzeOnce — an agent:<n> independent query tier proven on the wire to never touch the user's cursor session. Stage 2: the runner (serial dispatch, 8-step cap -> LLM_AGENT_LIMIT via llm:error, AbortSignal threaded to the engine query, degrade tri-state where single-shot is the same loop with no tools — wire byte-identity asserted at three layers); check caught a model-supplied __proto__ poisoning parseToolArguments (null-prototype record, test + mutation R8). Stage 3: ToolSteps in the teacher panel (fragment accumulation preserved, ~120-char previews, blank-state reload semantics documented) + e2e against a scripted SSE model server through the real provider parser; check caught a vacuous cross-check (whole-turn innerText always contains the step JSON — fixed to read markdown paragraphs only, sabotage-verified). Final gate: A1-A7 all PASS; the A2 citation gap closed with a search_library e2e (matched count + typed result fields digit-matched answer-vs-step). 8 dead M1-era i18n keys removed; both mutation harnesses now exit non-zero on escapes (exit code is the gate, seeded-escape demonstrated); design deviations recorded in-design; architecture.md to M3; 5 spec lessons captured. CI to green took three rounds: icon byte-identity test timeout on cold windows runners (60s budget), then a genuine prettier non-idempotence bug on trailing-argument comments (comment moved above the call; three --writes produced three layouts); final run green on all three OS with every packaged gate success. 1433 unit/integration + 42 e2e, 36/36 + 95/95 mutations.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d134858` | (see git log) |
+| `4800187` | (see git log) |
+| `f428cc0` | (see git log) |
+| `40f3c87` | (see git log) |
+| `b095537` | (see git log) |
+| `98971f6` | (see git log) |
+
+### Status
+
+[OK] **Completed**
