@@ -12,7 +12,7 @@ State at record time: all gates green — lint, typecheck (5 projects), 1433 uni
 | A4 | **PASS** | `MAX_AGENT_STEPS = 8`; the 9th provider call never issued (requests-length asserted); `llm:error` with `LLM_AGENT_LIMIT` (append-only registration, real en/zh-CN translations); exactly one terminal event (counted on cap path and pinned on both cancel paths); run state released (`finally` + `failRun`), new send works after. |
 | A5 | **PASS** | Cancel mid-stream (delta < 40, one terminal) and mid-tool (signal reaches `analyzeOnce`, no `tool_result` leak, one terminal); abort before first turn costs zero requests. Reload: blank-state semantics documented (spec + chatStore headers), main finishes the run (real HTTP count), no re-attachment machinery; unit suite pins the dropped event grammar. `analyzeOnce` settles on shutdown — no orphan engine. |
 | A6 | **PASS** | A9 meta-test green and non-vacuous (injection test fails when an uncovered channel is added); M3 added zero IPC channels — tool chunks rode the existing `llm:delta` union. Mutations: 36/36 (runner step logic, cap, degrade decision, null-prototype args record R8, search filter) + 95/95 (M2 set, extended M93–M95). Both harnesses exit non-zero on escape/invalid — the exit code is the gate (seeded-escape demonstrations in the Stage-4 prep report). |
-| A7 | **PASS (local)** / **CI pending push** | Local: all gates above + `pnpm build` + 42/42 e2e incl. the packaged launch vs the real bundled engine (engine/packaging unregressed). CI (next push): three OS jobs green; per-OS Typecheck/Tests/Build/e2e/Package/Packaged launch gate/Trellis immutability; artifacts uploaded. |
+| A7 | **PASS — all three platforms** (CI run [#34354818136](https://github.com/WASABI110/GoMentor/actions/runs/34354818136), commit `98971f6`) | Local: all gates above + `pnpm build` + 42/42 e2e incl. the packaged launch vs the real bundled engine (engine/packaging unregressed). CI (next push): three OS jobs green; per-OS Typecheck/Tests/Build/e2e/Package/Packaged launch gate/Trellis immutability; artifacts uploaded. |
 
 ## Deviations from design.md (recorded in-design at Stage 4, all deliberate)
 
@@ -27,3 +27,9 @@ State at record time: all gates green — lint, typecheck (5 projects), 1433 uni
 3. `engine:linux-x64` sha256 remains TOFU-unrecorded (M2 carry-forward; environment-blocked, first Linux-side fetch records it — `949eb16` made that safe).
 4. Harness asymmetry: `mutate-llm` has an explicit `total <= 0` baseline check, `mutate-katago` relies on the new terminal gate; align when next touched.
 5. M4 natural fits noted during the gate: an A1-describe-pattern test for `get_position` citations; consuming the winrate graph from agent analyses.
+
+## CI rounds to green (2026-09-09)
+
+- [#34240011345](https://github.com/WASABI110/GoMentor/actions/runs/34240011345) (`40f3c87`): windows unit tests failed — the icon byte-identity test timed out at vitest's 5s default on a cold 2-core runner (re-rasterises a 1024px canvas + 7 ICO sizes; dev machines and ubuntu/macos passed). Fixed with a 60s budget in `b095537`.
+- [#34240976903](https://github.com/WASABI110/GoMentor/actions/runs/34240976903) (`b095537`): Repo gates Format failed — the timeout comment sat in the call's trailing-argument region, where prettier re-flows multi-line comments **non-idempotently** (three consecutive --writes produced three layouts; format:check can never pass). Comment moved above the `it(` in `98971f6`.
+- [#34354818136](https://github.com/WASABI110/GoMentor/actions/runs/34354818136) (`98971f6`): **all three OS green**; per-platform verified — Format success, windows Unit tests success, all three Packaged launch gates success.
