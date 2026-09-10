@@ -80,6 +80,13 @@ export const errorCodeSchema = z.enum([
   'LIBRARY_DUPLICATE',
   'LIBRARY_NOT_FOUND',
 
+  // SQLite foundation (M4). `DB_CORRUPT` is a startup state, not a crash: the
+  // file is quarantined as `.corrupt` (nothing destroyed — the settings.ts
+  // precedent) and the app starts on a fresh empty database with a warning.
+  'DB_CORRUPT',
+  'DB_OPEN_FAILED',
+  'DB_MIGRATION_FAILED',
+
   // External integrations — inherently fragile, isolated by design.
   'SOURCE_UNREACHABLE',
   'SOURCE_AUTH_EXPIRED',

@@ -25,6 +25,15 @@ electronVersion: 33.4.11
 # the `../../`. CI benefits identically: no second Electron download.
 electronDist: ../../node_modules/electron/dist
 
+# better-sqlite3 ships as a prebuilt Electron-ABI binding, not a source build:
+# @electron/rebuild (the default `npmRebuild: true`) would compile it from
+# source and demand a platform toolchain on every packaging machine, while the
+# `package` scripts have already installed the matching prebuilt via
+# `scripts/sqlite-abi.ts electron` (the ABI story lives there and in
+# `src/main/db/connection.ts`). What ships is exactly what `pnpm e2e` ran
+# against — the same argument as electronDist above.
+npmRebuild: false
+
 directories:
   output: dist
   buildResources: build

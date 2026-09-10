@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AppError,
   type AnalysisResult,
@@ -8,6 +11,7 @@ import {
   type SecretKey,
 } from '@gomentor/shared'
 import type { SgfCollection } from '@gomentor/core/sgf/ast'
+import { parseSgf } from '@gomentor/core/sgf/parser'
 import type { SettingsFs } from '../../src/main/settings'
 import type { EngineService } from '../../src/main/katago/service'
 import type { LlmService } from '../../src/main/llm/service'
@@ -50,6 +54,7 @@ vi.mock('electron', () => ({
 // Imported after `vi.mock` so the mocked `electron` is what `events.ts` binds.
 const { createLlmService } = await import('../../src/main/llm/service')
 const { createGameStore } = await import('../../src/main/library/store')
+const { openDatabase } = await import('../../src/main/db/connection')
 const { createSettingsService } = await import('../../src/main/settings')
 const { runAgentLoop } = await import('../../src/main/llm/agent/runner')
 const { ScriptedLlmProvider } = await import('./fake-llm-provider')
@@ -110,13 +115,14 @@ const GAME: Game = {
   importedAt: '2026-09-07T00:00:00.000Z',
 }
 
-/** A minimal collection body; these tests never serialise, only store. */
-const COLLECTION: SgfCollection = {
-  roots: [],
-  bom: null,
-  encoding: 'utf-8',
-  leadingText: '',
-}
+/**
+ * A minimal but real collection. The DB-backed store serialises the AST into
+ * the `sgf` column on `put` and re-parses it on `get`, so the fixture must
+ * survive that round trip: an empty `roots` array serialises to zero bytes
+ * and `get` would throw `SGF_EMPTY`. A hand-built AST with no backing bytes
+ * was fine only under the Map, which never re-parsed.
+ */
+const COLLECTION: SgfCollection = parseSgf('(;GM[1]FF[4]CA[UTF-8]SZ[19])')
 
 const ANALYSIS: AnalysisResult = {
   queryId: 'agent:1',
@@ -150,9 +156,21 @@ function fakeEngine(
   }
 }
 
+/** One real database for the file (the store is DB-backed since M4). */
+const dbDir = mkdtempSync(join(tmpdir(), 'gomentor-agent-'))
+const db = openDatabase(join(dbDir, 'library.db'))
+
+afterAll(() => {
+  db.close()
+  rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
+
 /** A real store that counts `get` calls, so "the tool never ran" is observable. */
 function countingStore(): { readonly store: GameStore; readonly reads: () => number } {
-  const inner = createGameStore()
+  const inner = createGameStore(db)
+  // Fresh per call, exactly as the per-call in-memory Map was: leftover rows
+  // from a previous test would change what `list`-shaped assertions see.
+  inner.clear()
   inner.put({ game: GAME, collection: COLLECTION })
   let reads = 0
   const store: GameStore = {
@@ -171,6 +189,10 @@ function countingStore(): { readonly store: GameStore; readonly reads: () => num
     },
     get size() {
       return inner.size
+    },
+    getIsMineOverride: (id) => inner.getIsMineOverride(id),
+    setIsMineOverride: (id, value) => {
+      inner.setIsMineOverride(id, value)
     },
   }
   return { store, reads: () => reads }

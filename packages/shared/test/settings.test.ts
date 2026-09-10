@@ -40,6 +40,7 @@ describe('settings forward-compatibility', () => {
     expect(parsed.ui.locale).toBe('zh-CN')
     expect(parsed.llm.kind).toBe('cloud')
     expect(parsed.engine.backend).toBeNull()
+    expect(parsed.profile.playerNames).toEqual([])
     // Both must default to off: telemetry is opt-in, and content telemetry is
     // permanently off the table.
     expect(parsed.telemetryConsent).toBe(false)

@@ -110,6 +110,28 @@ describe('round-trip', () => {
     expect(service.update({ library: { roots: ['/b'] } }).library.roots).toEqual(['/b'])
   })
 
+  it('round-trips the profile player-name list (M4)', () => {
+    const fs = memoryFs()
+    createSettingsService(fs, PATH).update({
+      profile: { playerNames: ['James', 'james-fox'] },
+    })
+
+    // Fresh service, so the assertion is about what reached the file.
+    const reloaded = createSettingsService(fs, PATH).get()
+
+    expect(reloaded.profile.playerNames).toEqual(['James', 'james-fox'])
+  })
+
+  it('defaults the profile section so an old settings file loads untouched', () => {
+    // A pre-M4 file names no `profile` key; it must load with the default
+    // rather than fail validation — the same forward-compat rule every
+    // section follows.
+    const fs = memoryFs(JSON.stringify({ version: 1 }))
+    const settings = createSettingsService(fs, PATH).get()
+
+    expect(settings.profile.playerNames).toEqual([])
+  })
+
   it('treats an explicit undefined as "not specified", not as a delete', () => {
     const fs = memoryFs()
     const service = createSettingsService(fs, PATH)

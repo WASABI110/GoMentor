@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review standards: forbidden patterns, A9 bidirectional coverage for the new channels, mutation expectations for the pure cores, citation-assertion teeth for C6."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify new codes are registered append-only; empty-profile-as-state; IPC envelope survival."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify the Stage 1 implementation matches the guidelines it fills: WAL, transactional numbered migrations, append-only schema evolution."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify batch/profile logs carry no SGF or analysis payloads."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify profile/batch stores hold inputs only; the derived profile comes from main on request."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check the new face ripples consistently: shared schema -> channel -> preload -> store -> component, A9 green."}
+{"file": ".trellis/tasks/09-09-profile-persistence/design.md", "reason": "Check against recorded decisions: GameStore interface invariance, batch namespace isolation and yield, pure-classifier input surface, no derived snapshots."}

@@ -7,6 +7,10 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     // e2e runs under Playwright, not vitest.
     exclude: ['test/e2e/**'],
+    // Runs before any test file imports the DB-backed store, so the
+    // better-sqlite3 binding matches plain Node even right after a `pnpm e2e`
+    // swapped it to the Electron ABI. See the setup file for the full story.
+    globalSetup: ['test/ensure-node-sqlite.setup.ts'],
   },
   // No `resolve.alias` for `@gomentor/*`. There was one, built with
   // `resolve('../../packages/shared/src')` — but `resolve` is relative to the

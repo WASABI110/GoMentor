@@ -35,6 +35,7 @@ export type Scope =
   | 'main:ipc'
   | 'main:settings'
   | 'main:secrets'
+  | 'main:db'
   | 'main:library'
   | 'main:sgf'
   | 'main:llm:service'

@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CHANNELS,
   CHANNEL_NAMES,
@@ -10,6 +13,7 @@ import {
 // Type-only, so this is erased at compile time and does not load the module
 // before `vi.mock` takes effect — the reason the value imports below are dynamic.
 import type { SettingsFs } from '../../src/main/settings'
+import type { SqliteDatabase } from '../../src/main/db/connection'
 
 /**
  * IPC handler integration: every channel registered, every response valid
@@ -93,6 +97,7 @@ vi.mock('electron', () => ({
 const { registerAllHandlers } = await import('../../src/main/ipc/index')
 const { createGameStore } = await import('../../src/main/library/store')
 const { createSettingsService } = await import('../../src/main/settings')
+const { openDatabase } = await import('../../src/main/db/connection')
 
 /** A fixed clock: `importedAt` would otherwise make every expectation a moving target. */
 const NOW = '2026-01-01T00:00:00.000Z'
@@ -196,6 +201,20 @@ let llm: ReturnType<typeof fakeLlm>
 let engine: ReturnType<typeof fakeEngine>
 
 /**
+ * One real database for the whole file, cleared per test. The store is DB-backed
+ * since M4; a fresh `Map` per test used to be free, and the equivalent here is
+ * `clear()` — the schema survives, the rows do not. Kept open until `afterAll`
+ * because Windows holds a lock on an open database file.
+ */
+const dbDir = mkdtempSync(join(tmpdir(), 'gomentor-handlers-'))
+const db: SqliteDatabase = openDatabase(join(dbDir, 'library.db'))
+
+afterAll(() => {
+  db.close()
+  rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
+
+/**
  * Locales the fake `relabelMenu` was called with, most recent last.
  *
  * A recording fake rather than a no-op: main translates the native menu itself
@@ -211,7 +230,8 @@ beforeEach(() => {
   sentEvents.length = 0
   relabelCalls.length = 0
   dialogResult = { canceled: true, filePaths: [] }
-  store = createGameStore()
+  store = createGameStore(db)
+  store.clear()
   secrets = fakeSecrets()
   llm = fakeLlm()
   engine = fakeEngine()

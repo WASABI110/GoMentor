@@ -44,6 +44,18 @@ export function settingsFile(): string {
 }
 
 /**
+ * The SQLite database (M4): library, analysis rows, batch ledger. A runtime
+ * artifact of `userData`, never in the repo — deleting it is the documented
+ * disaster-recovery path (the library is re-importable; the file is a derived
+ * index). One file for the whole app rather than per-feature databases: the
+ * analysis and ledger tables are foreign-keyed to `games`, and cross-database
+ * FKs are not a thing SQLite does.
+ */
+export function dbFile(): string {
+  return join(userDataDir(), 'library.db')
+}
+
+/**
  * Read-only assets shipped with the build (KataGo binary, networks, KB seed).
  * In dev these live in the repo; packaged, they are unpacked beside the app.
  * `process.resourcesPath` is undefined outside a packaged build, hence the

@@ -11,18 +11,19 @@
   },
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "tsx scripts/sqlite-abi.ts electron && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.renderer-test.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
-    "package": "electron-vite build && electron-builder --config electron-builder.yml --publish never",
-    "package:dir": "electron-vite build && electron-builder --dir --config electron-builder.yml",
+    "package": "tsx scripts/sqlite-abi.ts electron && electron-vite build && electron-builder --config electron-builder.yml --publish never",
+    "package:dir": "tsx scripts/sqlite-abi.ts electron && electron-vite build && electron-builder --dir --config electron-builder.yml",
     "bench:engine": "tsx scripts/bench-eigen.ts",
-    "e2e": "electron-vite build && playwright test"
+    "e2e": "tsx scripts/sqlite-abi.ts electron && electron-vite build && playwright test"
   },
   "dependencies": {
     "@gomentor/core": "workspace:*",
     "@gomentor/shared": "workspace:*",
+    "better-sqlite3": "12.4.1",
     "electron-log": "^5.2.4",
     "electron-updater": "^6.3.9",
     "i18next": "^24.2.1",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
+    "@types/better-sqlite3": "7.6.13",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",

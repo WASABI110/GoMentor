@@ -119,6 +119,7 @@ const settingsFixture = {
     analyzeOwnership: true,
   },
   library: { roots: [], watchEnabled: true },
+  profile: { playerNames: [] },
   ui: {
     locale: 'zh-CN',
     theme: 'dark',

@@ -35,6 +35,9 @@
     "LIBRARY_FILE_UNREADABLE": "This file could not be read.",
     "LIBRARY_DUPLICATE": "This game is already in your library.",
     "LIBRARY_NOT_FOUND": "That game could not be found.",
+    "DB_CORRUPT": "The library database was damaged, so it was set aside and a new one created. Your games can be re-imported; the old file was kept next to the new database.",
+    "DB_OPEN_FAILED": "The library database could not be opened.",
+    "DB_MIGRATION_FAILED": "The library database could not be upgraded to this version.",
     "SOURCE_UNREACHABLE": "The external service could not be reached.",
     "SOURCE_AUTH_EXPIRED": "Your sign-in has expired. Please sign in again.",
     "SOURCE_SCHEMA_CHANGED": "The external service changed its data format, so this feature is unavailable for now."

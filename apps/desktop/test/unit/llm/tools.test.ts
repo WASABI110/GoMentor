@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
 import {
   AppError,
   type AnalysisResult,
@@ -6,9 +9,11 @@ import {
   type GameSummary,
 } from '@gomentor/shared'
 import { createGameStore, type GameStore } from '../../../src/main/library/store'
+import { openDatabase } from '../../../src/main/db/connection'
 import type { EngineService } from '../../../src/main/katago/service'
 import { AGENT_QUERY_VISITS } from '../../../src/main/katago/session'
 import type { SgfCollection } from '@gomentor/core/sgf/ast'
+import { parseSgf } from '@gomentor/core/sgf/parser'
 import {
   PV_LIMIT,
   RECENT_MOVE_LIMIT,
@@ -44,13 +49,14 @@ import {
 
 const SIGNAL = new AbortController().signal
 
-/** A minimal collection body; these tests never serialise, only store. */
-const COLLECTION: SgfCollection = {
-  roots: [],
-  bom: null,
-  encoding: 'utf-8',
-  leadingText: '',
-}
+/**
+ * A minimal but real collection. The DB-backed store serialises the AST into
+ * the `sgf` column on `put` and re-parses it on `get`, so the fixture must
+ * survive that round trip: an empty `roots` array serialises to zero bytes
+ * and `get` would throw `SGF_EMPTY`. A hand-built AST with no backing bytes
+ * was fine only under the Map, which never re-parsed.
+ */
+const COLLECTION: SgfCollection = parseSgf('(;GM[1]FF[4]CA[UTF-8]SZ[19])')
 
 function game(overrides: Partial<Game> = {}): Game {
   return {
@@ -79,8 +85,23 @@ function game(overrides: Partial<Game> = {}): Game {
   }
 }
 
+/**
+ * One real database for the file (DB-backed store since M4), cleared per
+ * `storeWith` so each test sees exactly the games it named — the same
+ * freshness the per-call in-memory `Map` used to provide. Closed only in
+ * `afterAll`: Windows holds a lock on an open database file.
+ */
+const dbDir = mkdtempSync(join(tmpdir(), 'gomentor-tools-'))
+const db = openDatabase(join(dbDir, 'library.db'))
+
+afterAll(() => {
+  db.close()
+  rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
+
 function storeWith(games: Game[]): GameStore {
-  const store = createGameStore()
+  const store = createGameStore(db)
+  store.clear()
   for (const entry of games) store.put({ game: entry, collection: COLLECTION })
   return store
 }
@@ -139,9 +160,16 @@ function fakeEngine(
 
 function context(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
-    store: storeWith([]),
     engine: fakeEngine(),
     ...overrides,
+    // Defaulted only when the caller supplied no store. An eager
+    // `store: storeWith([])` above the spread would evaluate BEFORE the
+    // spread merges the caller's store (object-literal properties all
+    // evaluate in order) — and `storeWith` clears the shared database as its
+    // first act, wiping the games the caller's store just put. With the
+    // Map-backed store that clear was harmless (each storeWith made a fresh
+    // Map); against one shared database it is destructive.
+    store: overrides.store ?? storeWith([]),
   }
 }
 

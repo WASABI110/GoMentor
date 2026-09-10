@@ -35,6 +35,9 @@
     "LIBRARY_FILE_UNREADABLE": "无法读取这个文件。",
     "LIBRARY_DUPLICATE": "这份棋谱已经在棋谱库中。",
     "LIBRARY_NOT_FOUND": "找不到这份棋谱。",
+    "DB_CORRUPT": "棋谱库数据库已损坏,已将其另存并新建了数据库。原有文件保留在数据库旁边,棋谱可重新导入。",
+    "DB_OPEN_FAILED": "无法打开棋谱库数据库。",
+    "DB_MIGRATION_FAILED": "棋谱库数据库无法升级到当前版本。",
     "SOURCE_UNREACHABLE": "无法连接到外部服务。",
     "SOURCE_AUTH_EXPIRED": "登录已过期,请重新登录。",
     "SOURCE_SCHEMA_CHANGED": "外部服务的数据格式已变更,该功能暂时不可用。"

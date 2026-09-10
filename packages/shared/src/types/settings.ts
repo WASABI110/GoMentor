@@ -72,6 +72,21 @@ export const librarySettingsSchema = z.object({
 })
 export type LibrarySettings = z.infer<typeof librarySettingsSchema>
 
+/**
+ * The student profile (M4). `playerNames` is the "my names" list: a game where
+ * either player name matches (case-insensitively) counts as the student's own
+ * and enters the profile. The matching predicate itself is pure and lives in
+ * `packages/core/src/profile/mine.ts` (Stage 3) — this section is only the
+ * persisted input to it.
+ *
+ * Default `[]`: an old settings file loads with no names and no games claimed,
+ * which is the correct before-the-feature behaviour, not a degraded one.
+ */
+export const profileSettingsSchema = z.object({
+  playerNames: z.array(z.string()).default([]),
+})
+export type ProfileSettings = z.infer<typeof profileSettingsSchema>
+
 export const uiSettingsSchema = z.object({
   locale: localeSchema.default('zh-CN'),
   theme: z.enum(['dark', 'light', 'system']).default('dark'),
@@ -95,6 +110,7 @@ export const settingsSchema = z
     llm: llmSettingsSchema.prefault({}),
     engine: engineSettingsSchema.prefault({}),
     library: librarySettingsSchema.prefault({}),
+    profile: profileSettingsSchema.prefault({}),
     ui: uiSettingsSchema.prefault({}),
     /** Opt-in, default off, no-op until consented. No content, ever. */
     telemetryConsent: z.boolean().default(false),
@@ -162,6 +178,10 @@ const libraryPatchSchema = z.object({
   watchEnabled: z.boolean().optional(),
 })
 
+const profilePatchSchema = z.object({
+  playerNames: z.array(z.string()).optional(),
+})
+
 const uiPatchSchema = z.object({
   locale: localeSchema.optional(),
   theme: z.enum(['dark', 'light', 'system']).optional(),
@@ -179,6 +199,7 @@ export const settingsPatchSchema = z
     llm: llmPatchSchema.optional(),
     engine: enginePatchSchema.optional(),
     library: libraryPatchSchema.optional(),
+    profile: profilePatchSchema.optional(),
     ui: uiPatchSchema.optional(),
     telemetryConsent: z.boolean().optional(),
     debugLogging: z.boolean().optional(),

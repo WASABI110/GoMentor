@@ -3,12 +3,14 @@ import { CHANNEL_NAMES } from '@gomentor/shared'
 import { initLogging, scoped } from './logger'
 import { createSettingsService } from './settings'
 import { createSecretsService, electronEncryptor } from './safe-storage'
+import { openLibraryDatabase } from './db/connection'
 import { createGameStore } from './library/store'
 import { createLlmService } from './llm/service'
 import { createEngineService } from './katago/service'
 import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
+import { dbFile } from './paths'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
 
@@ -42,13 +44,17 @@ let services: ReturnType<typeof createServices> | undefined
 function createServices() {
   const settings = createSettingsService()
   const secrets = createSecretsService(settings.secretStore, electronEncryptor)
-  const store = createGameStore()
+  // Before the handlers and before the store: migrations run here, once, at
+  // startup (`app.ready` has resolved by the time this is called, so `userData`
+  // exists). A damaged file is quarantined inside — the app still starts.
+  const db = openLibraryDatabase(dbFile())
+  const store = createGameStore(db)
   // The engine before the LLM service: the agent loop's tool calls reach into
   // it, so it must exist by the time a run can start.
   const engine = createEngineService({ settings })
   const llm = createLlmService(settings, secrets, { store, engine })
   const telemetry = createTelemetry()
-  return { settings, secrets, store, llm, engine, telemetry }
+  return { settings, secrets, db, store, llm, engine, telemetry }
 }
 
 // Two instances would fight over settings, the log file, and — from M2 —
@@ -161,4 +167,8 @@ app.on('before-quit', () => {
   // kill in the process layer's own 'exit' handler as the last resort.
   void services?.engine.shutdown()
   removeAllHandlers(CHANNEL_NAMES)
+  // Last, after the handlers that could still write are gone: a clean close
+  // checkpoints the WAL into the database file, so a copied-at-rest `library.db`
+  // (backup, support request) is complete without its sidecar files.
+  services?.db.close()
 })
