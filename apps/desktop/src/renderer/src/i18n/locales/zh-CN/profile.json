@@ -1,0 +1,21 @@
+{
+  "title": "学生画像",
+  "category": {
+    "opening-direction": "布局方向",
+    "middlegame-fighting": "中盘战斗",
+    "endgame-precision": "官子精度",
+    "whole-board-blindspot": "全盘盲区"
+  },
+  "trend": {
+    "improving": "好转",
+    "steady": "持平",
+    "worsening": "恶化"
+  },
+  "evidenceMove": "第 {{moveNumber}} 手 −{{loss}}%",
+  "nothingAnalysed": "你的 {{myGames}} 局棋还没有分析过。先运行下面的批量分析,画像才有依据。",
+  "noWeaknesses": "目前没有发现明显的弱点类别。继续下棋,画像会随着分析更新。",
+  "batchStart": "分析我的棋库",
+  "batchCancel": "停止",
+  "batchProgress": "正在分析 {{done}}/{{total}} 局…",
+  "batchHint": "已分析 {{analysed}}/{{myGames}} 局"
+}

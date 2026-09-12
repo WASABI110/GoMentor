@@ -354,6 +354,18 @@ describe('buildSystemPrompt — tool capability', () => {
     const prompt = buildSystemPrompt({ locale: 'zh-CN', toolsAvailable: true })
     expect(prompt).toContain('调用')
   })
+
+  it('pins the profile constraint: categories come from get_profile, never invented', () => {
+    // The M4 rule the design adds: the teacher quotes the profile's categories
+    // and numbers, it does not classify. A prompt that drops this invites the
+    // model to grade the student on taxonomy it made up.
+    const en = buildSystemPrompt({ locale: 'en', toolsAvailable: true })
+    expect(en).toMatch(/get_profile/)
+    expect(en).toMatch(/never invent a category or a number/i)
+    const zh = buildSystemPrompt({ locale: 'zh-CN', toolsAvailable: true })
+    expect(zh).toContain('get_profile')
+    expect(zh).toContain('绝不自行发明类别或数字')
+  })
 })
 
 describe('buildSystemPrompt — determinism', () => {

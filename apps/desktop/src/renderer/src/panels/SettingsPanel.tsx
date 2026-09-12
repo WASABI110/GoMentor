@@ -45,6 +45,12 @@ export function SettingsPanel(): React.JSX.Element {
   const [draft, setDraft] = useState<Partial<Settings> | null>(null)
   const [keyInput, setKeyInput] = useState('')
   const [keySaved, setKeySaved] = useState(false)
+  /**
+   * The names textarea holds a *string* (one name per line) while the document
+   * holds the list. Local like the LLM fields: committing on every keystroke
+   * would write a half-typed name into the document the profile reads.
+   */
+  const [namesDraft, setNamesDraft] = useState('')
 
   // Clear the "saved" confirmation automatically, and clean up the timeout if the
   // panel unmounts — otherwise a late setState would run on an unmounted component.
@@ -62,6 +68,7 @@ export function SettingsPanel(): React.JSX.Element {
   useEffect(() => {
     if (settings !== null && draft === null) {
       setDraft(settings)
+      setNamesDraft(settings.profile.playerNames.join('\n'))
     }
   }, [settings, draft])
 
@@ -88,6 +95,15 @@ export function SettingsPanel(): React.JSX.Element {
         model: llm.model,
         temperature: llm.temperature,
         maxTokens: llm.maxTokens,
+      },
+      // One name per line; blank lines are the user's paragraphing, not names.
+      // Trimmed so a trailing newline does not become an empty entry the mine
+      // filter would ignore anyway — better not to store it.
+      profile: {
+        playerNames: namesDraft
+          .split('\n')
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0),
       },
     }
 
@@ -255,6 +271,27 @@ export function SettingsPanel(): React.JSX.Element {
             {t('settings:llm.apiKeySet')}
           </p>
         )}
+      </fieldset>
+
+      <fieldset className="settings-section">
+        <legend>{t('settings:section.profile')}</legend>
+        {/* One name per line: names can contain commas, and a list the user
+          edits in place reads better than a repeated add/remove form for
+          something most users write once. */}
+        <label className="settings-field">
+          <span>{t('settings:profile.playerNames')}</span>
+          <textarea
+            className="settings-textarea"
+            data-testid="settings-player-names"
+            rows={3}
+            value={namesDraft}
+            placeholder={t('settings:profile.playerNamesPlaceholder')}
+            onChange={(event) => {
+              setNamesDraft(event.target.value)
+            }}
+          />
+        </label>
+        <p className="settings-hint">{t('settings:profile.playerNamesHint')}</p>
       </fieldset>
 
       <Button

@@ -316,6 +316,21 @@ const MUTATIONS: Mutation[] = [
     from: '  const value: Record<string, unknown> = Object.create(null) as Record<string, unknown>',
     to: '  const value: Record<string, unknown> = {} as Record<string, unknown>',
   },
+  // --- tools.ts: the get_profile tool (M4 Stage 4) --------------------------
+  {
+    id: 'P1',
+    file: TOOLS,
+    what: 'drop get_profile from the registry (the teacher loses the profile and will not say so)',
+    from: '  searchLibraryTool,\n  getProfileTool,\n]',
+    to: '  searchLibraryTool,\n]',
+  },
+  {
+    id: 'P2',
+    file: TOOLS,
+    what: 'fabricate an empty profile instead of returning the derivation',
+    from: '    return { content: JSON.stringify(ctx.profile()), isError: false }',
+    to: '    return {\n      content: JSON.stringify({ weaknesses: [], myGames: 0, analysedMyGames: 0 }),\n      isError: false,\n    }',
+  },
 ]
 
 interface SuiteResult {

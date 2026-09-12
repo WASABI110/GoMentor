@@ -9,6 +9,7 @@ import {
   type Game,
   type GameSummary,
   type Player,
+  type ProfileSnapshot,
 } from '@gomentor/shared'
 import { z } from 'zod'
 import type { EngineService } from '../../katago/service'
@@ -84,6 +85,12 @@ export interface ToolContext {
   readonly gameId?: string
   readonly store: GameStore
   readonly engine: EngineService
+  /**
+   * The student profile, derived on demand (M4). A seam rather than the
+   * repository: the derivation is `profile.handlers`' `buildSnapshot`, and the
+   * tool must not know how the snapshot came to be — only what it may quote.
+   */
+  readonly profile: () => ProfileSnapshot
 }
 
 /**
@@ -425,11 +432,34 @@ const searchLibraryTool = defineTool({
   },
 })
 
+/**
+ * The student's profile as the teacher may quote it. The snapshot already
+ * carries at most three weaknesses with at most three evidence rows each (the
+ * core's own caps, mirrored by the shared schema), so the tool's job is only
+ * to hand the derivation over verbatim — no summarising layer to drift from
+ * the panel the student sees.
+ */
+const getProfileTool = defineTool({
+  name: 'get_profile',
+  description:
+    "Read the student's weakness profile, derived from the analysis of their " +
+    'own games: at most three weakness categories, each with a score (winrate ' +
+    'points lost per recent game, exponentially weighted toward recent games), ' +
+    'a trend, and up to three concrete evidence rows (game id and move number) ' +
+    'you may cite. Quote these categories and numbers as returned — the ' +
+    'categories are the app’s, not yours to invent.',
+  zodSchema: z.object({}),
+  execute: (_args, ctx) => {
+    return { content: JSON.stringify(ctx.profile()), isError: false }
+  },
+})
+
 /** The whole registry, in the order the model is offered it. */
 export const AGENT_TOOLS: readonly AnyAgentTool[] = [
   getPositionTool,
   getAnalysisTool,
   searchLibraryTool,
+  getProfileTool,
 ]
 
 /**

@@ -1,3 +1,5 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:http'
 import { join, resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -239,6 +241,18 @@ function citeFromToolMessage(body: string): string {
       )
     }
     return `${String(matched)} games matched.`
+  }
+  const weaknesses = (payload as { weaknesses?: unknown }).weaknesses
+  if (Array.isArray(weaknesses)) {
+    // A profile reply (M4): cite the top weakness's score, the same
+    // quote-from-the-payload honesty as the winrate branch. The snapshot the
+    // tool returned carries at most three; the citation uses the first —
+    // the one the panel shows as the headline weakness.
+    const first = weaknesses[0] as { score?: unknown } | undefined
+    if (typeof first?.score === 'number') {
+      return `the profile scores the leading weakness at ${String(first.score)}.`
+    }
+    return 'the profile found no weakness to cite.'
   }
   return 'the tool replied.'
 }
@@ -743,5 +757,118 @@ test.describe('a reload mid-run loses the answer, not the app', () => {
     await page.getByTestId('chat-input').fill('again')
     await page.getByTestId('chat-send').click()
     await expect(panel).not.toHaveAttribute('data-run-id', '')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// C6: the teacher quotes the student profile's real numbers — the tool result
+// carries the derivation the panel would show, and the answer cites it
+// ---------------------------------------------------------------------------
+
+test.describe('the teacher reads the student profile (C6)', () => {
+  let app: ElectronApplication
+  let page: Page
+  let model: ScriptedModel
+  let profileDir: string
+
+  /**
+   * The same generated record the profile spec uses: a named student's game
+   * the fake engine analyses through the real batch scheduler, so the
+   * profile's numbers are rows the production pipeline wrote — not fixtures
+   * this spec invented.
+   */
+  const STUDENT = 'Student'
+  const buildStudentSgf = (): string => {
+    const moves = Array.from({ length: 30 }, (_, i) => {
+      const letter = (n: number): string => String.fromCharCode(97 + n)
+      return `;${i % 2 === 0 ? 'B' : 'W'}[${letter(i % 19)}${letter(Math.floor(i / 19))}]`
+    }).join('')
+    return `(;GM[1]FF[4]CA[UTF-8]SZ[19]PB[${STUDENT}]PW[Opponent]KM[6.5]${moves})`
+  }
+
+  test.beforeAll(async () => {
+    profileDir = mkdtempSync(join(tmpdir(), 'gomentor-profile-teacher-'))
+    writeFileSync(join(profileDir, 'student.sgf'), buildStudentSgf())
+    model = await startScriptedModel({
+      probe: 'tool_call',
+      firstCall: { name: 'get_profile', arguments: '{}' },
+    })
+    app = await launchApp({
+      userDataDir: profileDir,
+      env: { GOMENTOR_KATAGO_BINARY: FAKE_CHILD },
+    })
+    page = await firstPage(app)
+  })
+
+  test.afterAll(async () => {
+    await app.close()
+    await model.close()
+  })
+
+  test('the answer cites the profile score the tool returned', async () => {
+    // Seed through the app's own paths: import, name the student, run the
+    // batch, and read the derived score back.
+    const seeded = await page.evaluate(
+      async (path) => {
+        const imported = await window.gomentor.library.import({ filePaths: [path] })
+        if (!imported.ok || imported.data.imported.length !== 1) return 'import'
+        const named = await window.gomentor.settings.set({
+          patch: { profile: { playerNames: ['Student'] } },
+        })
+        if (!named.ok) return 'settings'
+        const started = await window.gomentor.batch.start({ scope: 'mine' })
+        if (!started.ok) return 'batch-start'
+        return 'ok'
+      },
+      join(profileDir, 'student.sgf'),
+    )
+    expect(seeded).toBe('ok')
+
+    // The run is one game against the fake engine: wait for the terminal
+    // snapshot. `profile:get` is the exact read the panel and the tool share.
+    const score = await page.evaluate(async () => {
+      const deadline = Date.now() + 20_000
+      while (Date.now() < deadline) {
+        const snapshot = await window.gomentor.profile.get({})
+        if (snapshot.ok && snapshot.data.weaknesses.length > 0) {
+          return snapshot.data.weaknesses[0]?.score
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+      return undefined
+    })
+    if (typeof score !== 'number') {
+      throw new Error('the batch run produced no weaknesses within the deadline')
+    }
+
+    await useLocalProvider(page, model.port)
+
+    await page.getByTestId('chat-input').fill('what are my weaknesses?')
+    await page.getByTestId('chat-send').click()
+
+    // The step row proves the tool ran, and its result preview shows the same
+    // derivation — the renderer-side half of the cross-check.
+    const step = page.locator('[data-testid="chat-step"][data-tool="get_profile"]')
+    await expect(step).toBeVisible()
+
+    // The wire: the grounded turn carried the tool message, and the message
+    // contained the score the app derived. The citation is honest only if
+    // this body holds the same digits the answer shows.
+    await model.waitForRequests(3)
+
+    const turns = page.getByTestId('chat-log').locator('li.chat-turn')
+    await expect(turns).toHaveCount(2)
+    const prose = (await turns.nth(1).locator('.chat-md p').allInnerTexts()).join(' ')
+    expect(prose.replace(/\s+/g, ' ')).toContain(`at ${String(score)}.`)
+
+    expect(model.bodies).toHaveLength(3)
+    expect(model.bodies[1]).toContain('get_profile')
+    expect(model.bodies[2]).toContain('tool_call_id')
+    // The tool message carried the derived score. Substring, not
+    // `"score":<n>`: the SDK pretty-prints the request body (measured in this
+    // spec's first run), and the tool content's quotes arrive escaped — the
+    // digits alone are the cross-check, and `prose` already ties them to the
+    // citation shape.
+    expect(model.bodies[2]).toContain(String(score))
   })
 })

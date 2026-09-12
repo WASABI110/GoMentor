@@ -8,6 +8,8 @@ import {
   type ChatChunk,
   type EngineGame,
   type Game,
+  profileSnapshotSchema,
+  type ProfileSnapshot,
   type SecretKey,
 } from '@gomentor/shared'
 import type { SgfCollection } from '@gomentor/core/sgf/ast'
@@ -137,6 +139,10 @@ const ANALYSIS: AnalysisResult = {
   complete: true,
 }
 
+/** The honest profile of an empty library — what every default run reads. */
+const emptyProfile = (): ProfileSnapshot =>
+  profileSnapshotSchema.parse({ weaknesses: [], myGames: 0, analysedMyGames: 0 })
+
 /**
  * A full stub of `EngineService` — not a partial cast — so an interface
  * addition fails this file's compile. `analyzeOnce` is injectable per test.
@@ -215,6 +221,7 @@ function harness(
   const service = createLlmService(settings, fakeSecrets(), {
     store,
     engine,
+    profile: emptyProfile,
     // The same provider for every fingerprint: each test scripts one
     // conversation and never changes settings mid-run.
     createProvider: () => provider,
@@ -370,6 +377,7 @@ describe('degrade: toolsSupported true runs the agent loop', () => {
       'get_position',
       'get_analysis',
       'search_library',
+      'get_profile',
     ])
     expect(first?.messages).toHaveLength(1)
 
@@ -443,6 +451,7 @@ describe('degrade: toolsSupported null probes first', () => {
       'get_position',
       'get_analysis',
       'search_library',
+      'get_profile',
     ])
   })
 
@@ -745,7 +754,12 @@ describe('runAgentLoop (direct)', () => {
       onDelta: (chunk) => {
         collected.push(chunk.type)
       },
-      toolContext: { gameId: 'g1', store: counted.store, engine },
+      toolContext: {
+        gameId: 'g1',
+        store: counted.store,
+        engine,
+        profile: emptyProfile,
+      },
     })
 
     expect(result.finishReason).toBe('stop')
@@ -774,7 +788,11 @@ describe('runAgentLoop (direct)', () => {
       request: baseRequest,
       signal: new AbortController().signal,
       onDelta: () => undefined,
-      toolContext: { store: countingStore().store, engine: fakeEngine() },
+      toolContext: {
+        store: countingStore().store,
+        engine: fakeEngine(),
+        profile: emptyProfile,
+      },
     })
 
     expect(result.finishReason).toBe('stop')
@@ -832,7 +850,11 @@ describe('runAgentLoop (direct)', () => {
       request: baseRequest,
       signal: new AbortController().signal,
       onDelta: () => undefined,
-      toolContext: { store: countingStore().store, engine: fakeEngine() },
+      toolContext: {
+        store: countingStore().store,
+        engine: fakeEngine(),
+        profile: emptyProfile,
+      },
     })
     expect(result.finishReason).toBe('length')
     expect(provider.requests).toHaveLength(1)
@@ -850,7 +872,11 @@ describe('runAgentLoop (direct)', () => {
         request: baseRequest,
         signal: new AbortController().signal,
         onDelta: () => undefined,
-        toolContext: { store: countingStore().store, engine: fakeEngine() },
+        toolContext: {
+          store: countingStore().store,
+          engine: fakeEngine(),
+          profile: emptyProfile,
+        },
       }),
     ).rejects.toMatchObject({ code: 'LLM_AGENT_LIMIT' })
     expect(provider.requests).toHaveLength(8)

@@ -1,0 +1,21 @@
+{
+  "title": "Student profile",
+  "category": {
+    "opening-direction": "Opening direction",
+    "middlegame-fighting": "Middlegame fighting",
+    "endgame-precision": "Endgame precision",
+    "whole-board-blindspot": "Whole-board blindspot"
+  },
+  "trend": {
+    "improving": "improving",
+    "steady": "steady",
+    "worsening": "worsening"
+  },
+  "evidenceMove": "Move {{moveNumber}}, −{{loss}}%",
+  "nothingAnalysed": "Your {{myGames}} games have not been analysed yet. Run the batch analysis below to give the profile something to read.",
+  "noWeaknesses": "No weakness stands out yet. The profile updates as more games are analysed.",
+  "batchStart": "Analyse my games",
+  "batchCancel": "Stop",
+  "batchProgress": "Analysing {{done}}/{{total}} games…",
+  "batchHint": "{{analysed}}/{{myGames}} games analysed"
+}

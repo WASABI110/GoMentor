@@ -66,6 +66,7 @@ const SPEC_NAMESPACES = [
   'teacher',
   'settings',
   'errors',
+  'profile',
 ] as const
 
 const LOCALES_DIR = join(import.meta.dirname, '../../src/renderer/src/i18n/locales')

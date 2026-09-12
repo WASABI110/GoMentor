@@ -9,6 +9,7 @@ import { createGameStore } from './library/store'
 import { createLlmService } from './llm/service'
 import { createEngineService } from './katago/service'
 import { createBatchService } from './katago/batch'
+import { buildSnapshot } from './ipc/profile.handlers'
 import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
@@ -56,7 +57,13 @@ function createServices() {
   // it, so it must exist by the time a run can start.
   const engine = createEngineService({ settings })
   const batch = createBatchService({ store, settings, engine, repository: analysis })
-  const llm = createLlmService(settings, secrets, { store, engine })
+  const llm = createLlmService(settings, secrets, {
+    store,
+    engine,
+    // The teacher quotes the same derivation the profile panel shows — one
+    // builder, so the tool's numbers cannot drift from the UI's.
+    profile: () => buildSnapshot({ store, repository: analysis, settings }),
+  })
   const telemetry = createTelemetry()
   return { settings, secrets, db, store, analysis, llm, engine, batch, telemetry }
 }

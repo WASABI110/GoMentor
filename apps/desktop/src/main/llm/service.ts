@@ -9,6 +9,7 @@ import {
   isAppError,
   type ChatContext,
   type ChatMessage,
+  type ProfileSnapshot,
   type Settings,
 } from '@gomentor/shared'
 import { scoped } from '../logger'
@@ -61,6 +62,12 @@ interface ActiveRun {
 export interface LlmServiceDeps {
   readonly store: GameStore
   readonly engine: EngineService
+  /**
+   * The student profile, derived on demand (M4). A seam like the store: the
+   * service does not know it comes from the analysis repository, and tests
+   * stub it with a fixed snapshot.
+   */
+  readonly profile: () => ProfileSnapshot
   /**
    * Provider seam, for tests. Defaults to the two factories. Typed as the
    * concrete class because the degrade path calls `probeCapabilities`, which
@@ -278,6 +285,7 @@ export function createLlmService(
                       : { gameId: input.context.gameId }),
                     store: deps.store,
                     engine: deps.engine,
+                    profile: deps.profile,
                   },
                 }
               : {}),

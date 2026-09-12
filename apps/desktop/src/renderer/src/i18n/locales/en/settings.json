@@ -4,6 +4,7 @@
     "ui": "Interface",
     "llm": "AI Teacher",
     "engine": "Analysis Engine",
+    "profile": "Student profile",
     "library": "Library",
     "privacy": "Privacy"
   },
@@ -56,6 +57,12 @@
     "watchEnabled": "Import new games automatically"
   },
   "privacy": {
+    "profile": {
+      "playerNames": "My names",
+      "playerNamesPlaceholder": "One name per line",
+      "playerNamesHint": "Games are matched by these names (either colour, case-insensitive) as the student profile's input. Professional games are excluded by default; mark them manually in the library."
+    },
+
     "telemetryConsent": "Send anonymous usage statistics",
     "telemetryHint": "Off by default. Crashes and feature counts only — never game records, chat, or keys.",
     "debugLogging": "Enable debug logging",

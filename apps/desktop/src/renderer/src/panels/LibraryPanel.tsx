@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useLibraryStore } from '../state/libraryStore'
 import { useGameStore } from '../state/gameStore'
 import { GameList } from '../components/GameList'
+import { ProfileSection } from '../components/ProfileSection'
 
 /**
  * The library panel.
@@ -71,6 +72,7 @@ export function LibraryPanel(): React.JSX.Element {
         }}
         onDropFiles={handleDropFiles}
       />
+      <ProfileSection />
     </aside>
   )
 }

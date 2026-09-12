@@ -62,7 +62,7 @@ The last two rows are the ones that erode first. If a renderer file starts imple
 - Stores: `camelCaseStore.ts` (`gameStore.ts`, `chatStore.ts`)
 - Hooks: `useThing.ts`
 - Everything else: `kebab-case.ts`
-- i18n namespaces: `common`, `board`, `analysis`, `teacher`, `settings`, `errors`
+- i18n namespaces: `common`, `board`, `analysis`, `teacher`, `settings`, `errors`, `profile`
 
 ---
 

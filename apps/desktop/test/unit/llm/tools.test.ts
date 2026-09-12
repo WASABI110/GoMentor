@@ -6,6 +6,7 @@ import {
   AppError,
   type AnalysisResult,
   type Game,
+  profileSnapshotSchema,
   type GameSummary,
 } from '@gomentor/shared'
 import { createGameStore, type GameStore } from '../../../src/main/library/store'
@@ -171,6 +172,16 @@ function context(overrides: Partial<ToolContext> = {}): ToolContext {
     // Map-backed store that clear was harmless (each storeWith made a fresh
     // Map); against one shared database it is destructive.
     store: overrides.store ?? storeWith([]),
+    // Defaulted only when the caller supplied no seam: an empty library's
+    // profile is the honest derivation of nothing.
+    profile:
+      overrides.profile ??
+      (() =>
+        profileSnapshotSchema.parse({
+          weaknesses: [],
+          myGames: 0,
+          analysedMyGames: 0,
+        })),
   }
 }
 
@@ -193,6 +204,7 @@ describe('toolSchemas', () => {
       'get_position',
       'get_analysis',
       'search_library',
+      'get_profile',
     ])
     expect(new Set(schemas.map((schema) => schema.name)).size).toBe(schemas.length)
   })
@@ -595,6 +607,40 @@ describe('search_library dispatch', () => {
     const outcome = await run('search_library', { player: '' })
     expect(outcome.isError).toBe(true)
     expect(outcome.content).toContain('player')
+  })
+})
+
+describe('get_profile dispatch', () => {
+  it('returns the seam snapshot verbatim — the teacher quotes what the panel shows', async () => {
+    // Through the schema for the reason every fixture here is: the shape the
+    // channel returns, not the shape this file hopes for.
+    const snapshot = profileSnapshotSchema.parse({
+      weaknesses: [
+        {
+          category: 'opening-direction',
+          score: 0.07,
+          trend: 'worsening',
+          evidence: [{ gameId: 'g1', moveNumber: 3, loss: 0.2 }],
+        },
+      ],
+      myGames: 4,
+      analysedMyGames: 2,
+    })
+    const outcome = await run('get_profile', {}, context({ profile: () => snapshot }))
+    expect(outcome.isError).toBe(false)
+    expect(JSON.parse(outcome.content)).toEqual(snapshot)
+  })
+
+  it('accepts no arguments (an empty request is the whole interface)', async () => {
+    const outcome = await run('get_profile', { gameId: 'g1' })
+    expect(outcome.isError).toBe(false)
+    // Unknown keys are stripped, not rejected — the settings.ts precedent —
+    // so the call succeeds and returns the (empty) profile.
+    expect(JSON.parse(outcome.content)).toEqual({
+      weaknesses: [],
+      myGames: 0,
+      analysedMyGames: 0,
+    })
   })
 })
 

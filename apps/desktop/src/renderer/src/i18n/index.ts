@@ -8,6 +8,7 @@ import zhAnalysis from './locales/zh-CN/analysis.json'
 import zhTeacher from './locales/zh-CN/teacher.json'
 import zhSettings from './locales/zh-CN/settings.json'
 import zhErrors from './locales/zh-CN/errors.json'
+import zhProfile from './locales/zh-CN/profile.json'
 
 import enCommon from './locales/en/common.json'
 import enBoard from './locales/en/board.json'
@@ -15,6 +16,7 @@ import enAnalysis from './locales/en/analysis.json'
 import enTeacher from './locales/en/teacher.json'
 import enSettings from './locales/en/settings.json'
 import enErrors from './locales/en/errors.json'
+import enProfile from './locales/en/profile.json'
 
 /**
  * Renderer i18n.
@@ -52,6 +54,7 @@ export const NAMESPACES = [
   'teacher',
   'settings',
   'errors',
+  'profile',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -77,6 +80,7 @@ const RESOURCES: Record<BundledLocale, Record<Namespace, object>> = {
     teacher: zhTeacher,
     settings: zhSettings,
     errors: zhErrors,
+    profile: zhProfile,
   },
   en: {
     common: enCommon,
@@ -85,6 +89,7 @@ const RESOURCES: Record<BundledLocale, Record<Namespace, object>> = {
     teacher: enTeacher,
     settings: enSettings,
     errors: enErrors,
+    profile: enProfile,
   },
 }
 

@@ -110,8 +110,11 @@ const CORE_ZH = [
 const CORE: Record<AuthoredLocale, string> = { en: CORE_EN, 'zh-CN': CORE_ZH }
 
 const TOOLS_EN =
-  'You may call the provided tools to look up analysis or reference material. Prefer calling a tool over guessing.'
-const TOOLS_ZH = '你可以调用提供的工具来查询分析或参考资料。宁可调用工具，也不要猜。'
+  'You may call the provided tools to look up analysis or reference material. Prefer calling a tool over guessing. ' +
+  'Weakness categories and profile numbers come only from the get_profile tool — quote and explain them; never invent a category or a number.'
+const TOOLS_ZH =
+  '你可以调用提供的工具来查询分析或参考资料。宁可调用工具，也不要猜。' +
+  '弱点类别与画像数字只能来自 get_profile 工具——只引用与解释；绝不自行发明类别或数字。'
 
 const TOOLS: Record<AuthoredLocale, string> = { en: TOOLS_EN, 'zh-CN': TOOLS_ZH }
 

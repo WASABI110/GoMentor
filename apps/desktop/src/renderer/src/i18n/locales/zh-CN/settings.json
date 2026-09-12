@@ -4,6 +4,7 @@
     "ui": "界面",
     "llm": "AI 教师",
     "engine": "分析引擎",
+    "profile": "学生画像",
     "library": "棋谱库",
     "privacy": "隐私"
   },
@@ -56,6 +57,12 @@
     "watchEnabled": "自动导入新棋谱"
   },
   "privacy": {
+    "profile": {
+      "playerNames": "我的名字",
+      "playerNamesPlaceholder": "每行一个名字",
+      "playerNamesHint": "按名字(任一颜色,大小写不敏感)识别你自己的对局,作为学生画像的输入。职业棋默认不计入;可在棋库中手动标记。"
+    },
+
     "telemetryConsent": "发送匿名使用统计",
     "telemetryHint": "默认关闭。只包含崩溃与功能计数,绝不包含棋谱、对话或密钥。",
     "debugLogging": "启用调试日志",

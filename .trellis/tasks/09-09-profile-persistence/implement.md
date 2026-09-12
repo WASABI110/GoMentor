@@ -50,12 +50,12 @@ pnpm exec tsx apps/desktop/scripts/sqlite-abi.ts node   # 原生绑定探测（�
 
 ## Stage 4 — 呈现、教师集成、最终门禁（R4；C5–C8）
 
-- [ ] ProfileSection：三弱项卡（类别 + 趋势 + score）+ 证据行点击 → 打开棋局跳手；批量按钮与进度；设置面板"我的名字"编辑
-- [ ] `get_profile` 工具（M3 注册表扩展，≤3 证据/类别精简 JSON）；教师提示词补"只引用不归类"约束；`mutate-llm.mts` 增锚点
-- [ ] i18n：`profile.json` 命名空间（zh-CN authored + en 实译）；类别名键
-- [ ] e2e：C5 证据跳转、C6 教师引用画像数字（A2 式交叉核对）
-- [ ] 文档：`architecture.md`（SQLite 段落改写"still no SQLite"、批量层、画像）、`ipc-contract.md`（新通道）；`database-guidelines.md` 填实（M1 留白兑现）；spec 沉淀教训
-- [ ] 最终门禁：C1–C8 逐条 `gomentor-verify` 只读判定记录到 `final-gate.md`；CI 三平台绿（含原生模块构建 + 打包门禁）
+- [x] ProfileSection：三弱项卡（类别 + 趋势 + score）+ 证据行点击 → 打开棋局跳手；批量按钮与进度；设置面板"我的名字"编辑
+- [x] `get_profile` 工具（M3 注册表扩展，≤3 证据/类别精简 JSON）；教师提示词补"只引用不归类"约束；`mutate-llm.mts` 增锚点
+- [x] i18n：`profile.json` 命名空间（zh-CN authored + en 实译）；类别名键
+- [x] e2e：C5 证据跳转、C6 教师引用画像数字（A2 式交叉核对）
+- [x] 文档：`architecture.md`（SQLite 段落改写"still no SQLite"、批量层、画像）、`ipc-contract.md`（新通道）；`database-guidelines.md` 填实（M1 留白兑现）；spec 沉淀教训
+- [x] 最终门禁：C1–C8 逐条 `gomentor-verify` 只读判定记录到 `final-gate.md`；CI 三平台绿（含原生模块构建 + 打包门禁）
 
 ## 风险文件 / 回滚点
 
