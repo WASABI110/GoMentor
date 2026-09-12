@@ -92,3 +92,27 @@ Delivered M3 end to end. Stage 1: read-only tool registry (ToolSchema from zod, 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: M4 complete: student profile & persistence — SQLite, batch tier, profile core, C1-C8 green on all three OS
+
+**Date**: 2026-09-12
+**Task**: M4 complete: student profile & persistence — SQLite, batch tier, profile core, C1-C8 green on all three OS
+**Branch**: `master`
+
+### Summary
+
+Delivered M4 end to end across four stages, each committed, pushed, and CI-green (three OS + repo gates) on first attempt. Stage 1: SQLite foundation — WAL, transactional numbered migrations, corrupt-file quarantine, GameStore Map->DB swap behind an unchanged interface (equivalence tests), better-sqlite3 ABI probe (pnpm rebuild proven a no-op under neverBuiltDependencies), C1 restart e2e. Stage 2: ledger-driven batch tier — batch:<n> one-shot queries (B3 third binding), waves from the thread model, yield to focus sessions, chunk checkpoints, rows+ledger-done in ONE transaction, cancel/engine-loss leave games pending, mine scope; 14 integration tests against the real service + fake child; mutate-profile harness born (G/P/B/D mutants). Stage 2's trellis-implement agent died on API quota mid-work; salvaged and completed in the main session — every leftover defect was unreconciled agent work, none a design flaw. Stage 3: pure profile core in packages/core — mine predicate relocated with the C4 professional exclusion (override > pro > names, one predicate shared by batch mine + profile), four-category classifier (type-locked signature, board-replay geometry via core Position, Chebyshev, recorded thresholds), normalized-decay EMA (textbook recurrence measured to give a 2-game library's OLDEST game ~93% weight — inverted recency; replaced), profile:get with readonly wire arrays and semantic refines; harness grew to 80 mutants across both packages, 80/80 caught. Stage 4: ProfileSection (evidence click-through reusing the open->seek path), settings my-names editor, get_profile tool (fourth registry entry, profile seam, quote-don't-classify prompt constraint both locales), profile.json i18n, e2e C5 (real batch against the fake engine drives the panel; no DB seeding — binding-ABI and honesty reasons recorded) and C6 (score digits cross-checked on the wire A2-style); architecture.md rewritten to M4; final-gate.md records C1-C8 per-criterion verdicts. Two mutation lessons specced: a no-op mutant presents as an escape (G11 replaced, not loosened) and a downstream gate can mask an upstream mutant (C10 fixture must let the effect reach the observable); per-gate ABI-state fact specced after a smoke launch measured alive-but-windowless on an ABI mismatch. Final tree: 1600 unit/integration + 45 e2e, mutations 95/95 + 38/38 + 80/80, all gates green, CI three OS green on every stage commit.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8f8afb` | (see git log) |
+| `0249a90` | (see git log) |
+| `975afb9` | (see git log) |
+| `eeb4c2c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
