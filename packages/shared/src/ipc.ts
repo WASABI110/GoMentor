@@ -5,6 +5,7 @@ import {
   engineGameSchema,
   engineInfoSchema,
 } from './types/analysis'
+import { batchProgressSchema, batchStatusSchema, batchScopeSchema } from './types/batch'
 import { chatChunkSchema, chatContextSchema, chatMessageSchema } from './types/chat'
 import { secretKeySchema, settingsPatchSchema, settingsSchema } from './types/settings'
 import { errorEnvelopeSchema } from './types/errors'
@@ -168,6 +169,39 @@ export const CHANNELS = {
     request: z.object({ moveNumber: z.number().int().min(0) }),
     response: z.object({ focusQueryId: z.string().nullable() }),
   },
+
+  /**
+   * Batch analysis of the library (M4 Stage 2). `batch:start` queues every
+   * in-scope game that is not already `done` in the ledger and returns the
+   * run's snapshot; the run itself proceeds in the background and reports on
+   * `batch:progress`. The engine starts lazily, like a game open — a
+   * chat-only user who clicks "analyse my library" pays exactly one engine
+   * start, and an engine that stays not-ready rejects with its own typed
+   * code (an expected state with a UI, not a crash).
+   *
+   * Starting while a run is active is `BATCH_ALREADY_RUNNING`, not a silent
+   * join: joining would report the in-flight run's scope and totals for a
+   * request that asked for something else.
+   */
+  'batch:start': {
+    request: z.object({ scope: batchScopeSchema }),
+    response: batchStatusSchema,
+  },
+  /**
+   * Stops the active run: in-flight queries are aborted (the engine is told,
+   * per the agent tier's terminate-on-cancel) and no new queries are issued.
+   * Games that did not finish stay `pending` in the ledger and resume on the
+   * next run. Cancelling with nothing running is a no-op, like `llm:cancel`.
+   */
+  'batch:cancel': {
+    request: empty,
+    response: batchStatusSchema,
+  },
+  /** The synchronous snapshot, so a freshly mounted panel syncs without subscribing first. */
+  'batch:status': {
+    request: empty,
+    response: batchStatusSchema,
+  },
 } as const
 
 export type Channels = typeof CHANNELS
@@ -220,6 +254,16 @@ export const EVENTS = {
    * cursor position never reaches the screen.
    */
   'engine:analysis': analysisResultSchema,
+
+  /**
+   * Batch-run progress: emitted on run start, after each game completes, and
+   * once with a terminal status (`done` | `cancelled` | `failed`). Bounded by
+   * the game's-in-the-run count, so no coalescing. A `failed` terminal
+   * carries the typed envelope (usually an `ENGINE_*` code) so the renderer
+   * can translate it; per-game failures are not errors — they are the
+   * `failed` count, and the game is retried on the next run.
+   */
+  'batch:progress': batchProgressSchema,
 } as const
 
 export type Events = typeof EVENTS

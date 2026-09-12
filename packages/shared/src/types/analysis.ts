@@ -73,6 +73,17 @@ export const SWEEP_QUERY_PREFIX = 'sweep:'
 export const AGENT_QUERY_PREFIX = 'agent:'
 
 /**
+ * The batch tier's prefix (M4 Stage 2): whole-library analysis queries issued
+ * by `main/katago/batch.ts` through the same one-shot channel as the agent
+ * tier (`analyzeOnce`). Fourth namespace beside `focus:`/`sweep:`/`agent:`,
+ * and like `agent:` a batch result is awaited in main and **never emitted on
+ * `engine:analysis`** — the prefix exists to keep the namespaces disjoint in
+ * one wire stream, so a `batch:<n>` id reaching the renderer is diagnosable
+ * from the id alone.
+ */
+export const BATCH_QUERY_PREFIX = 'batch:'
+
+/**
  * The game record an analysis request carries.
  *
  * Self-contained by design (`design.md` §IPC additions): the engine service

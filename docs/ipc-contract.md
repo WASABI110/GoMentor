@@ -144,6 +144,22 @@ The response names the focus query the open produces — `{ focusQueryId }`, or 
 
 Moves the analysis cursor: `{ moveNumber }` → `{ focusQueryId | null }`. Latest-wins debounced in main (~50ms): holding an arrow key fires dozens of cursor steps and each must not become an engine query, and every new focus query supersedes the prior in-flight one with a production `encodeTerminateRequest`. `focusQueryId` is allocated eagerly, so the response names the query the results will correlate against; `null` means no record is held.
 
+### `batch:start`
+
+Queues a batch-analysis run over the library — `{ scope: 'all' | 'mine' }` — and returns the run's snapshot (`batchStatusSchema`). The run proceeds in the background and reports on [`batch:progress`](#batchprogress); this response is for syncing, not for awaiting completion.
+
+The queue is every in-scope game whose ledger row is not `done` — finished games are never re-analysed, and a run interrupted by a crash or cancel resumes from the ledger on the next start. The engine starts lazily, exactly as a game open starts it; a not-ready engine rejects with the engine's own typed code, not a batch-specific one. Starting while a run is active — including one still starting — is `BATCH_ALREADY_RUNNING`: a silent join would report the in-flight run's scope and totals for a request that asked for something else.
+
+An empty queue (empty library, or a `mine` scope no game matches) is a state, not an error: the run completes immediately with `total: 0`.
+
+### `batch:cancel`
+
+Stops the active run. In-flight engine queries are aborted (the engine is told, per the agent tier's terminate-on-cancel) and no new queries are issued; games that did not finish stay `pending` in the ledger and resume on the next run. Cancelling with nothing running is a no-op, like `llm:cancel`.
+
+### `batch:status`
+
+The synchronous batch snapshot: `batchStatusSchema` — the same shape [`batch:progress`](#batchprogress) pushes, minus the terminal states. A panel mounting after the run started has missed the first emissions and asks; a panel mounting with no run running sees `idle` with zeroed counts.
+
 ## Events
 
 Main → renderer, one-way. Payload schemas are `EVENTS` in [`ipc.ts:116`](../packages/shared/src/ipc.ts#L116).
@@ -193,6 +209,12 @@ A renderer that subscribes late asks [`engine:info`](#engineinfo) rather than wa
 One analysis tick: `analysisResultSchema` — the winrate/score readout, ranked candidates with principal variations, and (when enabled) the per-point ownership array. `scoreLead` and ownership are **positive-favours-black**; `winrate` is from the side to move's perspective (`player`).
 
 Coalesced per query to ≤20/s in main before sending: KataGo streams partial results far faster than a UI paints, and flooding IPC is a known Electron cliff. `queryId` namespaces the query — `focus:<n>` for the position under the cursor, `sweep:<move>` for the whole-record background sweep — and the payload carries `gameId` + `moveNumber` so the renderer can refuse a late tick from a since-closed game or a superseded cursor — stale results must never paint over the board.
+
+### `batch:progress`
+
+Batch-run progress: `batchProgressSchema` — `{ status, total, done, failed, error? }`. Emitted on run start, after each game completes, and once with a terminal status. Bounded by the number of games in the run, which is why it needs no coalescing.
+
+Terminal states: `done` (every queued game finished), `cancelled` (the user stopped the run), `failed` (the engine was lost mid-run — `error` carries the typed envelope, usually an `ENGINE_*` code). Per-game failures are **not** errors on this face: they are the `failed` count, the game is marked `failed` in the ledger, and it is retried on the next run. Cancellation likewise leaves unfinished games `pending` for the next run's resume.
 
 ## Adding a channel
 

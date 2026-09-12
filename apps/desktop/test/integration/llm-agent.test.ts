@@ -152,6 +152,7 @@ function fakeEngine(
     setGame: () => ({ focusQueryId: null }),
     setCursor: () => ({ focusQueryId: null }),
     analyzeOnce,
+    isFocusActive: () => false,
     shutdown: () => Promise.resolve(),
   }
 }

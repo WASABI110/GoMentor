@@ -5,6 +5,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CHANNELS,
   CHANNEL_NAMES,
+  type BatchScope,
   type ChannelName,
   type IpcResult,
   type Locale,
@@ -190,8 +191,38 @@ function fakeEngine() {
     // agent tools will consume in Stage 2.
     analyzeOnce: () =>
       Promise.reject(new Error('analyzeOnce is not exercised by these handlers')),
+    isFocusActive: () => false,
     notifyStatus: () => undefined,
     shutdown: () => Promise.resolve(),
+  }
+}
+
+/**
+ * Records the batch service calls; returns canned snapshots so the routing
+ * assertion can tell "the handler returned the service's answer" apart from
+ * "the handler made up an answer". The scheduler itself is integration-tested
+ * in `batch.test.ts`.
+ */
+function fakeBatch() {
+  const calls: { starts: BatchScope[]; cancels: number } = { starts: [], cancels: 0 }
+  return {
+    calls,
+    start(scope: BatchScope) {
+      calls.starts.push(scope)
+      return Promise.resolve({
+        status: 'running' as const,
+        scope,
+        total: 3,
+        done: 0,
+        failed: 0,
+      })
+    },
+    cancel() {
+      calls.cancels += 1
+      return { status: 'idle' as const, total: 0, done: 0, failed: 0 }
+    },
+    status: () => ({ status: 'idle' as const, total: 0, done: 0, failed: 0 }),
+    shutdown: () => undefined,
   }
 }
 
@@ -199,6 +230,7 @@ let store: ReturnType<typeof createGameStore>
 let secrets: ReturnType<typeof fakeSecrets>
 let llm: ReturnType<typeof fakeLlm>
 let engine: ReturnType<typeof fakeEngine>
+let batch: ReturnType<typeof fakeBatch>
 
 /**
  * One real database for the whole file, cleared per test. The store is DB-backed
@@ -235,12 +267,14 @@ beforeEach(() => {
   secrets = fakeSecrets()
   llm = fakeLlm()
   engine = fakeEngine()
+  batch = fakeBatch()
   registerAllHandlers({
     store,
     settings: createSettingsService(memoryFs(), '/virtual/settings.json'),
     secrets,
     llm,
     engine,
+    batch,
     now: () => NOW,
     relabelMenu: (locale) => relabelCalls.push(locale),
   })
@@ -309,6 +343,7 @@ describe('registration covers the contract', () => {
         secrets,
         llm,
         engine,
+        batch,
         now: () => NOW,
         relabelMenu: (locale) => relabelCalls.push(locale),
       })
@@ -378,6 +413,7 @@ describe('the boundary rejects bad requests', () => {
       secrets: exploding,
       llm,
       engine,
+      batch,
       now: () => NOW,
       relabelMenu: (locale) => relabelCalls.push(locale),
     })
@@ -736,6 +772,37 @@ describe('engine channels', () => {
   })
 })
 
+describe('batch channels', () => {
+  it('batch:start routes the scope and returns the run snapshot', async () => {
+    const result = await invoke('batch:start', { scope: 'mine' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({
+      status: 'running',
+      scope: 'mine',
+      total: 3,
+      done: 0,
+      failed: 0,
+    })
+    expect(batch.calls.starts).toEqual(['mine'])
+  })
+
+  it('batch:cancel delegates and returns the post-cancel snapshot', async () => {
+    const result = await invoke('batch:cancel', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ status: 'idle', total: 0, done: 0, failed: 0 })
+    expect(batch.calls.cancels).toBe(1)
+  })
+
+  it('batch:status returns the synchronous snapshot', async () => {
+    const result = await invoke('batch:status', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ status: 'idle', total: 0, done: 0, failed: 0 })
+  })
+})
+
 describe('every channel is exercised', () => {
   it('leaves no channel untested', () => {
     // A9's spirit applied here: a coverage claim that is not itself checked
@@ -757,6 +824,9 @@ describe('every channel is exercised', () => {
       'engine:start',
       'engine:setGame',
       'engine:setCursor',
+      'batch:start',
+      'batch:cancel',
+      'batch:status',
     ]
     expect([...exercised].sort()).toEqual([...CHANNEL_NAMES].sort())
   })

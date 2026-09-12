@@ -317,6 +317,48 @@ const CASES: Record<ChannelName, ChannelCase> = {
     validResponse: { focusQueryId: null },
     invalidResponses: [{}, { focusQueryId: 1 }, { focusQueryId: ['focus:2'] }],
   },
+
+  'batch:start': {
+    validRequest: { scope: 'all' },
+    // 'mine' is the other legal scope; anything else is not a scope.
+    invalidRequests: [{}, { scope: 'everything' }, { scope: 7 }, { scope: null }],
+    // The response is the run snapshot: scope is named only while running.
+    validResponse: { status: 'running', scope: 'mine', total: 4, done: 1, failed: 0 },
+    invalidResponses: [
+      {},
+      // 'done' is a progress-event status, not a snapshot status.
+      { status: 'done', total: 0, done: 0, failed: 0 },
+      { status: 'running', total: -1, done: 0, failed: 0 },
+      // Counts must not exceed the total.
+      { status: 'running', scope: 'all', total: 1, done: 2, failed: 0 },
+      // A scope this build does not know is not named in a snapshot.
+      { status: 'running', scope: 'theirs', total: 1, done: 0, failed: 0 },
+    ],
+  },
+  'batch:cancel': {
+    validRequest: {},
+    invalidRequests: [null, 'stop', 42],
+    // Cancelling with nothing running is a no-op: idle, zeroed counts.
+    validResponse: { status: 'idle', total: 0, done: 0, failed: 0 },
+    invalidResponses: [
+      {},
+      { status: 'idle', done: 0, failed: 0 },
+      { status: 'cancelled', total: 0, done: 0, failed: 0 },
+    ],
+  },
+  'batch:status': {
+    validRequest: {},
+    // Non-objects are not requests. (Unknown keys are stripped, not rejected,
+    // on every envelope — the settings.ts forward-compat precedent.)
+    invalidRequests: [null, 'status', 42],
+    validResponse: { status: 'idle', total: 0, done: 0, failed: 0 },
+    invalidResponses: [
+      {},
+      { status: 'running' },
+      // The count invariant holds on the snapshot too.
+      { status: 'idle', total: 0, done: 1, failed: 0 },
+    ],
+  },
 }
 
 const EVENT_CASES: Record<
@@ -387,6 +429,34 @@ const EVENT_CASES: Record<
       // Ownership values outside -1..1 are not a confident estimate, they are
       // a protocol violation.
       { ...analysisResultFixture, ownership: [0.5, -3] },
+    ],
+  },
+  'batch:progress': {
+    valid: { status: 'running', total: 4, done: 1, failed: 0 },
+    invalid: [
+      {},
+      // 'idle' is a snapshot status; a progress event is never idle.
+      { status: 'idle', total: 0, done: 0, failed: 0 },
+      { status: 'running', total: 2, done: 0, failed: -1 },
+      // The typed envelope rides only on a terminal failure.
+      {
+        status: 'running',
+        total: 2,
+        done: 1,
+        failed: 0,
+        error: { code: 'ENGINE_CRASHED', message: 'x' },
+      },
+      // A terminal failure carries a typed envelope, not a bare string.
+      { status: 'failed', total: 2, done: 0, failed: 1, error: 'engine died' },
+      // Counts must not exceed the total.
+      { status: 'running', total: 2, done: 3, failed: 0 },
+      {
+        status: 'failed',
+        total: 2,
+        done: 0,
+        failed: 1,
+        error: { code: 'ENGINE_TIMEOUT', message: 'x' },
+      },
     ],
   },
 }

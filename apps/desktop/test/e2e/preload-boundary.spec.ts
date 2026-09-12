@@ -184,8 +184,8 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       // The nested groups too. A frozen root with a mutable
       // `g.settings` would leave `setSecret` replaceable, which is the method
       // where interception would matter most.
-      nestedFrozen: ['sgf', 'library', 'llm', 'settings', 'engine'].every((k) =>
-        Object.isFrozen(g[k] as object),
+      nestedFrozen: ['sgf', 'library', 'llm', 'settings', 'engine', 'batch'].every(
+        (k) => Object.isFrozen(g[k] as object),
       ),
       versionUnchanged: g['version'] === before,
       injectionAbsent: !('injected' in g),
@@ -210,6 +210,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'llm',
       'settings',
       'engine',
+      'batch',
       'onLlmDelta',
       'onLlmDone',
       'onLlmError',
@@ -217,6 +218,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'onMenuCommand',
       'onEngineStatus',
       'onEngineAnalysis',
+      'onBatchProgress',
     ].sort(),
   )
 })

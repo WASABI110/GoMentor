@@ -44,6 +44,7 @@ export type Scope =
   | 'main:katago:process'
   | 'main:katago:service'
   | 'main:katago:session'
+  | 'main:katago:batch'
   | 'main:telemetry'
   | 'renderer'
 

@@ -4,9 +4,11 @@ import { initLogging, scoped } from './logger'
 import { createSettingsService } from './settings'
 import { createSecretsService, electronEncryptor } from './safe-storage'
 import { openLibraryDatabase } from './db/connection'
+import { createAnalysisRepository } from './db/repositories/analysis'
 import { createGameStore } from './library/store'
 import { createLlmService } from './llm/service'
 import { createEngineService } from './katago/service'
+import { createBatchService } from './katago/batch'
 import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
@@ -49,12 +51,14 @@ function createServices() {
   // exists). A damaged file is quarantined inside — the app still starts.
   const db = openLibraryDatabase(dbFile())
   const store = createGameStore(db)
+  const analysis = createAnalysisRepository(db)
   // The engine before the LLM service: the agent loop's tool calls reach into
   // it, so it must exist by the time a run can start.
   const engine = createEngineService({ settings })
+  const batch = createBatchService({ store, settings, engine, repository: analysis })
   const llm = createLlmService(settings, secrets, { store, engine })
   const telemetry = createTelemetry()
-  return { settings, secrets, db, store, llm, engine, telemetry }
+  return { settings, secrets, db, store, analysis, llm, engine, batch, telemetry }
 }
 
 // Two instances would fight over settings, the log file, and — from M2 —
@@ -114,6 +118,7 @@ if (!gotLock) {
       secrets: created.secrets,
       llm: created.llm,
       engine: created.engine,
+      batch: created.batch,
       now: () => new Date().toISOString(),
       // A locale change rebuilds the whole menu rather than patching labels:
       // Electron replaces the menu wholesale, so there is no partial-update path
@@ -162,6 +167,9 @@ app.on('before-quit', () => {
   // In-flight streams hold AbortControllers and an open HTTP connection. Left
   // running, the process would linger after the window closed.
   services?.llm.shutdown()
+  // Before the engine: aborts the run's in-flight queries and stops the queue,
+  // so no batch continuation tries to write the database after the close below.
+  services?.batch.shutdown()
   // A spawned engine that outlived the app would be an orphan holding CPU and
   // the log tail; stop() is terminate → grace → SIGKILL, with a synchronous
   // kill in the process layer's own 'exit' handler as the last resort.

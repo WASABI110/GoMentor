@@ -3,6 +3,7 @@ import type { EngineGame } from '@gomentor/shared'
 import {
   AGENT_QUERY_VISITS,
   buildAgentQuery,
+  buildBatchQuery,
   buildFocusQuery,
   buildSweepQuery,
   createAnalysisSession,
@@ -314,6 +315,48 @@ describe('buildAgentQuery', () => {
   it('clamps exactly like the other tiers', () => {
     expect(buildAgentQuery('agent:1', game, 99).moves).toHaveLength(3)
     expect(buildAgentQuery('agent:1', game, -5).moves).toHaveLength(0)
+  })
+})
+
+describe('buildBatchQuery', () => {
+  const game = engineGame({
+    setup: { black: [{ x: 3, y: 3 }], white: [] },
+    moves: [
+      { player: 'black', coord: { x: 3, y: 3 } },
+      { player: 'white', coord: { x: 15, y: 3 } },
+      { player: 'black', coord: { x: 3, y: 15 } },
+    ],
+  })
+
+  it('carries the batch contract: the sweep budget, no ownership, no streaming reports', () => {
+    const query = buildBatchQuery('batch:1', game, 2)
+    // The batch tier's whole point (`batch.ts`): whole-library analysis at the
+    // sweep budget. `SWEEP_MAX_VISITS` is imported by the builder rather than
+    // restated, so this equality IS the single-source-of-truth claim — retune
+    // the sweep and the batch retunes with it.
+    expect(query.maxVisits).toBe(SWEEP_MAX_VISITS)
+    expect(query.includeOwnership).toBe(false)
+    expect('reportDuringSearchEvery' in query).toBe(false)
+    // The id is the caller's (`batch:<n>`), never invented here.
+    expect(query.id).toBe('batch:1')
+  })
+
+  it('reuses the focus machinery for the prefix, setup stones, and rules', () => {
+    const query = buildBatchQuery('batch:2', game, 2)
+    expect(query.moves).toHaveLength(2)
+    expect(query.moves.at(-1)).toEqual({ player: 'white', coord: { x: 15, y: 3 } })
+    expect(query.initialStones).toEqual([{ player: 'black', coord: { x: 3, y: 3 } }])
+    expect(query.rules).toBe('japanese')
+    expect(query.boardSize).toBe(19)
+    expect(query.komi).toBe(6.5)
+  })
+
+  it('clamps exactly like the other tiers', () => {
+    expect(buildBatchQuery('batch:1', game, 99).moves).toHaveLength(3)
+    expect(buildBatchQuery('batch:1', game, -5).moves).toHaveLength(0)
+    // -1 is the discriminating case: an unclamped slice(0, -1) would silently
+    // drop the LAST move (length 2), while the clamp asks for the empty prefix.
+    expect(buildBatchQuery('batch:1', game, -1).moves).toHaveLength(0)
   })
 })
 

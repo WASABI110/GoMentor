@@ -38,6 +38,7 @@
     "DB_CORRUPT": "The library database was damaged, so it was set aside and a new one created. Your games can be re-imported; the old file was kept next to the new database.",
     "DB_OPEN_FAILED": "The library database could not be opened.",
     "DB_MIGRATION_FAILED": "The library database could not be upgraded to this version.",
+    "BATCH_ALREADY_RUNNING": "A batch analysis is already running.",
     "SOURCE_UNREACHABLE": "The external service could not be reached.",
     "SOURCE_AUTH_EXPIRED": "Your sign-in has expired. Please sign in again.",
     "SOURCE_SCHEMA_CHANGED": "The external service changed its data format, so this feature is unavailable for now."

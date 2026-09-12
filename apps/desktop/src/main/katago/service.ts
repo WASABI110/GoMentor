@@ -29,6 +29,7 @@ import {
 } from './process'
 import {
   buildAgentQuery,
+  buildBatchQuery,
   createAnalysisSession,
   playerToMoveAt,
   type AnalysisSession,
@@ -169,6 +170,18 @@ export interface EngineService {
    * contract: it never touches `desired`, the sweep, or the cursor debounce,
    * so an in-flight user focus query survives it.
    *
+   * `options.queryId` overrides the auto-allocated `agent:<n>` id. The batch
+   * tier (M4) is the one caller that passes it, wearing its own `batch:<n>`
+   * namespace so the four tiers stay disjoint on the wire; the id must still
+   * be unique across every tier, which the batch driver's own counter
+   * guarantees.
+   *
+   * `options.tier` selects the query shape: `'agent'` (the default) carries
+   * the M3 tool budget with ownership; `'batch'` carries the sweep budget
+   * with no ownership and no mid-search reports — the whole-library tier's
+   * contract (`batch.ts`), which rides this same one-shot channel instead of
+   * duplicating its deferred machinery.
+   *
    * Throws `AppError`, never a bare `Error`: `ENGINE_UNAVAILABLE` when the
    * engine is not ready (an expected state with a UI, not a crash path),
    * `ENGINE_QUERY_FAILED` when a live engine fails to answer (deadline, exit,
@@ -180,7 +193,17 @@ export interface EngineService {
     game: EngineGame,
     moveNumber: number,
     signal?: AbortSignal,
+    options?: { readonly queryId?: string; readonly tier?: 'agent' | 'batch' },
   ): Promise<AnalysisResult>
+  /**
+   * True while a record is held for interactive analysis (`setGame` with a
+   * game, not yet cleared). The batch tier (M4) polls this to yield the engine
+   * to the user: background library analysis must not compete with the
+   * position the user is looking at (`design.md` §批量调度). Reads `desired`,
+   * which survives engine restarts, so a crash-and-respawn does not falsely
+   * report "focus cleared" and let batch flood a restarting engine.
+   */
+  isFocusActive(): boolean
   /** Terminates the child on app quit. A spawned child never outlives the app. */
   shutdown(): Promise<void>
 }
@@ -869,6 +892,10 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       emitStatus(snapshot())
     },
 
+    isFocusActive() {
+      return desired.game !== null
+    },
+
     setGame(game, atMove) {
       desired = { game, atMove: game === null ? 0 : atMove }
       if (session === null) {
@@ -896,7 +923,7 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       return { focusQueryId: session.setCursor(moveNumber) }
     },
 
-    async analyzeOnce(game, moveNumber, signal) {
+    async analyzeOnce(game, moveNumber, signal, options) {
       // Expected absence, not an exception path: the caller (the tool layer)
       // turns this into a readable tool result the model can relay.
       if (stopped) {
@@ -923,7 +950,13 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       }
 
       agentQueryCounter += 1
-      const queryId = `${AGENT_QUERY_PREFIX}${String(agentQueryCounter)}`
+      // The batch tier supplies its own `batch:<n>` id (its routing namespace
+      // on the shared one-shot channel); without one we allocate `agent:<n>`.
+      // The counter advances either way — gaps are harmless, uniqueness is
+      // what the id owes its waiter — and cross-tier prefix collision is the
+      // caller's contract to keep (the batch driver owns a private counter).
+      const queryId =
+        options?.queryId ?? `${AGENT_QUERY_PREFIX}${String(agentQueryCounter)}`
       // Clamped, not rejected, exactly like `buildFocusQuery`: an agent query
       // past the end of a record studies the final position. The *tool* layer
       // validates the bound and reports it to the model; the service's job is
@@ -959,7 +992,13 @@ export function createEngineService(options: EngineServiceOptions): EngineServic
       }
       signal?.addEventListener('abort', onAbort, { once: true })
 
-      proc.send(encodeAnalysisRequest(buildAgentQuery(queryId, game, at)))
+      proc.send(
+        encodeAnalysisRequest(
+          options?.tier === 'batch'
+            ? buildBatchQuery(queryId, game, at)
+            : buildAgentQuery(queryId, game, at),
+        ),
+      )
       log.debug('agent query issued', {
         id: queryId,
         gameId: context.gameId,

@@ -5,8 +5,10 @@ import { registerLibraryHandlers } from './library.handlers'
 import { registerSettingsHandlers } from './settings.handlers'
 import { registerLlmHandlers } from './llm.handlers'
 import { registerEngineHandlers } from './engine.handlers'
+import { registerBatchHandlers } from './batch.handlers'
 import type { Locale } from '@gomentor/shared'
 import type { EngineService } from '../katago/service'
+import type { BatchService } from '../katago/batch'
 import type { GameStore } from '../library/store'
 import type { LlmService } from '../llm/service'
 import type { SecretsService } from '../safe-storage'
@@ -29,6 +31,8 @@ export interface Dependencies {
   llm: LlmService
   /** The engine lifecycle. Lazy: constructed here, started on first game open. */
   engine: EngineService
+  /** The batch scheduler (M4). Lazy like the engine: started by `batch:start`. */
+  batch: BatchService
   /**
    * Injected rather than called directly so handler tests are deterministic —
    * `importedAt` otherwise makes every expected value a moving target.
@@ -56,6 +60,7 @@ export function registerAllHandlers(deps: Dependencies): void {
   registerSettingsHandlers(deps.settings, deps.secrets, deps.relabelMenu)
   registerLlmHandlers(deps.llm)
   registerEngineHandlers(deps.engine)
+  registerBatchHandlers(deps.batch)
 }
 
 export { removeAllHandlers }

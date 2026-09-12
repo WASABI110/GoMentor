@@ -87,6 +87,15 @@ export const errorCodeSchema = z.enum([
   'DB_OPEN_FAILED',
   'DB_MIGRATION_FAILED',
 
+  // Batch analysis (M4 Stage 2). The batch face otherwise reuses ENGINE_* and
+  // LIBRARY_* codes — engine readiness and per-game data problems belong to
+  // those domains. This one names the batch tier's only failure of its own:
+  // starting a second run while one is active. Silent-joining would
+  // misrepresent the new request's scope (the progress UI would report totals
+  // for a run the caller did not ask for), so it is surfaced, and the renderer
+  // can answer it by showing the running run's status instead.
+  'BATCH_ALREADY_RUNNING',
+
   // External integrations — inherently fragile, isolated by design.
   'SOURCE_UNREACHABLE',
   'SOURCE_AUTH_EXPIRED',

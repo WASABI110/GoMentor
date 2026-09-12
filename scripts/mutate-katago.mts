@@ -41,6 +41,20 @@ interface Mutation {
   readonly to: string
 }
 
+/**
+ * `buildSweepQuery`'s opening lines, shared prefix for the M71–M73 anchors.
+ * M4 Stage 2's `buildBatchQuery` duplicates the sweep query's tail
+ * field-for-field (same budget constant, same no-ownership flag), so the
+ * interior `maxVisits`/`includeOwnership` lines no longer identify the sweep
+ * builder on their own — every anchor must span from the function head (the
+ * llm harness's L28 pattern).
+ */
+const SWEEP_FN =
+  'export function buildSweepQuery(\n  id: string,\n  game: EngineGame,\n  atMove: number,\n): AnalysisQuery {'
+const SWEEP_OBJ =
+  SWEEP_FN +
+  "\n  const moveNumber = Math.max(0, Math.min(Math.trunc(atMove), game.moves.length))\n  return {\n    id,\n    boardSize: game.boardSize,\n    komi: game.komi,\n    rules: toKataGoRuleset(game.rules),\n    moves: game.moves\n      .slice(0, moveNumber)\n      .map((move) => ({ player: move.player, coord: move.coord })),\n    initialStones: [\n      ...game.setup.black.map((coord) => ({ player: 'black' as const, coord })),\n      ...game.setup.white.map((coord) => ({ player: 'white' as const, coord })),\n    ],"
+
 const MUTATIONS: Mutation[] = [
   // --- gtp.ts: sanitising -------------------------------------------------
   {
@@ -554,22 +568,27 @@ const MUTATIONS: Mutation[] = [
     id: 'M71',
     file: 'apps/desktop/src/main/katago/session.ts',
     what: 'ask the engine for ownership on sweep queries',
-    from: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,',
-    to: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: true,',
+    from:
+      SWEEP_OBJ + '\n    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,',
+    to: SWEEP_OBJ + '\n    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: true,',
   },
   {
     id: 'M72',
     file: 'apps/desktop/src/main/katago/session.ts',
     what: 'subscribe sweep queries to streaming reports',
-    from: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n  }',
-    to: '    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n    reportDuringSearchEvery: 0.1,\n  }',
+    from:
+      SWEEP_OBJ +
+      '\n    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n  }',
+    to:
+      SWEEP_OBJ +
+      '\n    maxVisits: SWEEP_MAX_VISITS,\n    includeOwnership: false,\n    reportDuringSearchEvery: 0.1,\n  }',
   },
   {
     id: 'M73',
     file: 'apps/desktop/src/main/katago/session.ts',
     what: 'sweep at the focus visit cap instead of the fixed one',
-    from: '    maxVisits: SWEEP_MAX_VISITS,',
-    to: '    maxVisits: 500,',
+    from: SWEEP_OBJ + '\n    maxVisits: SWEEP_MAX_VISITS,',
+    to: SWEEP_OBJ + '\n    maxVisits: 500,',
   },
   {
     id: 'M74',

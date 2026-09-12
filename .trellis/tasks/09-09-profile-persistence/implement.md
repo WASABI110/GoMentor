@@ -19,22 +19,22 @@ pnpm exec tsx apps/desktop/scripts/sqlite-abi.ts node   # 原生绑定探测（�
 
 ## Stage 1 — SQLite 底座与库持久化（R1；C1）
 
-- [ ] `main/db/`：连接（WAL、foreign_keys）、`migrations/0001_init.sql`（games/analysis/batch_state 三表）、事务迁移器、`paths.ts` 增 `dbFile()`；启动序（ready 后、handler 前）
-- [ ] `library/store.ts` 换 DB 底座：`GameStore` 接口逐方法不变；`list()` 最近优先 = `imported_at DESC`；`is_mine_override` 列暴露最小读写面
-- [ ] settings 增 `profile.playerNames`（zod default `[]`，向后兼容加载）
-- [ ] 测试：真实 DB 文件（temp dir）——迁移幂等/事务性、store 全方法行为等价（对照既有内存测试）、contentHash 重导入语义、损坏 DB 的可读错误（非崩溃）
-- [ ] e2e：import → 退出 → 重启（同 profile）→ 棋谱在且可打开（C1）
+- [x] `main/db/`：连接（WAL、foreign_keys）、`migrations/0001_init.sql`（games/analysis/batch_state 三表）、事务迁移器、`paths.ts` 增 `dbFile()`；启动序（ready 后、handler 前）
+- [x] `library/store.ts` 换 DB 底座：`GameStore` 接口逐方法不变；`list()` 最近优先 = `imported_at DESC`；`is_mine_override` 列暴露最小读写面
+- [x] settings 增 `profile.playerNames`（zod default `[]`，向后兼容加载）
+- [x] 测试：真实 DB 文件（temp dir）——迁移幂等/事务性、store 全方法行为等价（对照既有内存测试）、contentHash 重导入语义、损坏 DB 的可读错误（非崩溃）
+- [x] e2e：import → 退出 → 重启（同 profile）→ 棋谱在且可打开（C1）
 
 **门禁证据**：`out/` 构建 + 启动；既有 e2e 全绿（store 底座替换对它们透明——这是接口不变性的直接证明）。验收：C1。
 
 ## Stage 2 — 批量分析与结果持久化（R2；C2）
 
-- [ ] `main/katago/batch.ts`：`batch:<n>` 命名空间、100 visits/手、无 ownership、有界并发、账本（batch_state 表）驱动的排队/续跑
-- [ ] 让路：focus 会话激活 → 停发新查询、在飞自然完成、恢复
-- [ ] 失效：contentHash 变更清该局 analysis + 账本项
-- [ ] IPC：`batch:start`（scope: all|mine）/`batch:cancel`/`batch:status`（invoke）+ `batch:progress` 事件；A9 元测试全覆盖（M4 恢复新增面——双向 + 非空虚）
-- [ ] 集成（fake 引擎）：多局库进度推进、取消即停、崩溃重启续跑不重算、让路时序、结果行落库与重启直读
-- [ ] `scripts/mutate-profile.mts` 建立（基线门禁 + 非零退出，沿用两 harness 的统一惯例）——首批锚点：账本状态机、批量预算/并发边界
+- [x] `main/katago/batch.ts`：`batch:<n>` 命名空间、100 visits/手、无 ownership、有界并发、账本（batch_state 表）驱动的排队/续跑
+- [x] 让路：focus 会话激活 → 停发新查询、在飞自然完成、恢复
+- [x] 失效：contentHash 变更清该局 analysis + 账本项
+- [x] IPC：`batch:start`（scope: all|mine）/`batch:cancel`/`batch:status`（invoke）+ `batch:progress` 事件；A9 元测试全覆盖（M4 恢复新增面——双向 + 非空虚）
+- [x] 集成（fake 引擎）：多局库进度推进、取消即停、崩溃重启续跑不重算、让路时序、结果行落库与重启直读
+- [x] `scripts/mutate-profile.mts` 建立（基线门禁 + 非零退出，沿用两 harness 的统一惯例）——首批锚点：账本状态机、批量预算/并发边界
 
 **门禁证据**：集成全绿 + e2e 批量进度（fake 引擎确定性）。验收：C2、C7（面覆盖）。
 

@@ -173,6 +173,14 @@ const api = Object.freeze({
       invoke('engine:setCursor', request),
   }),
 
+  batch: Object.freeze({
+    start: (request: ChannelRequest<'batch:start'>) => invoke('batch:start', request),
+    cancel: (request: ChannelRequest<'batch:cancel'>) =>
+      invoke('batch:cancel', request),
+    status: (request: ChannelRequest<'batch:status'>) =>
+      invoke('batch:status', request),
+  }),
+
   onLlmDelta: (listener: (payload: EventPayload<'llm:delta'>) => void) =>
     subscribe('llm:delta', listener),
   onLlmDone: (listener: (payload: EventPayload<'llm:done'>) => void) =>
@@ -187,6 +195,8 @@ const api = Object.freeze({
     subscribe('engine:status', listener),
   onEngineAnalysis: (listener: (payload: EventPayload<'engine:analysis'>) => void) =>
     subscribe('engine:analysis', listener),
+  onBatchProgress: (listener: (payload: EventPayload<'batch:progress'>) => void) =>
+    subscribe('batch:progress', listener),
 })
 
 export type GoMentorApi = typeof api

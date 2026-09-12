@@ -308,6 +308,53 @@ export function buildAgentQuery(
   }
 }
 
+/**
+ * Builds the batch tier's whole-library query (`batch.ts`, M4 Stage 2).
+ *
+ * Deliberately its own function, not a parameterised `buildFocusQuery`, for
+ * the recorded reason `buildSweepQuery` exists: the tiers differ in fixed
+ * ways, and spelling them out is the mutation-covered record of the contract.
+ * Batch queries differ from the sweep's in exactly one way — the id prefix,
+ * supplied by the caller (`batch:<n>`, `BATCH_QUERY_PREFIX`) — and agree with
+ * it on everything else, which is stated here rather than restated in code:
+ *
+ * - **`SWEEP_MAX_VISITS`, imported, not restated** — the design pins the batch
+ *   budget at the sweep level (100 visits); one constant is the single source
+ *   of truth for both cheap whole-record tiers, so retuning the sweep retunes
+ *   the batch and a mutation of either use is caught by both suites.
+ * - **No ownership** — the batch output is per-move rows for the profile;
+ *   an ownership tensor per position is computed cost for data nothing reads
+ *   (the sweep precedent, one tier down).
+ * - **No `reportDuringSearchEvery`** — the consumer is the ledger, which
+ *   awaits one final answer per position; mid-search reports are wire noise.
+ *
+ * Everything else — prefix slicing, setup stones as `initialStones`, rules
+ * mapping, clamping — is the focus machinery's semantics, reused through the
+ * same code shape rather than reimplemented.
+ */
+export function buildBatchQuery(
+  id: string,
+  game: EngineGame,
+  atMove: number,
+): AnalysisQuery {
+  const moveNumber = Math.max(0, Math.min(Math.trunc(atMove), game.moves.length))
+  return {
+    id,
+    boardSize: game.boardSize,
+    komi: game.komi,
+    rules: toKataGoRuleset(game.rules),
+    moves: game.moves
+      .slice(0, moveNumber)
+      .map((move) => ({ player: move.player, coord: move.coord })),
+    initialStones: [
+      ...game.setup.black.map((coord) => ({ player: 'black' as const, coord })),
+      ...game.setup.white.map((coord) => ({ player: 'white' as const, coord })),
+    ],
+    maxVisits: SWEEP_MAX_VISITS,
+    includeOwnership: false,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The session
 // ---------------------------------------------------------------------------
