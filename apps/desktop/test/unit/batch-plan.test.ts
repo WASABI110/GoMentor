@@ -187,6 +187,24 @@ describe('planQueue', () => {
     expect(planQueue([candidateGame('a', { blackName: 'Me' })], 'mine', [])).toEqual([])
   })
 
+  it('mine excludes a professional game by rank and claims an overridden one', () => {
+    // The same isMyGame predicate the profile filters through (C4): a
+    // professional's game is not the student's play, unless the user claims it.
+    const games = [
+      candidateGame('pro', { blackName: 'Lee Changho', blackRank: '9p' }),
+      candidateGame('claimed-pro', {
+        whiteName: 'Lee Changho',
+        whiteRank: '9 dan pro',
+        override: true,
+      }),
+      candidateGame('amateur', { blackName: 'Lee Changho', blackRank: '7d' }),
+    ]
+    expect(planQueue(games, 'mine', ['Lee Changho'])).toEqual([
+      'claimed-pro',
+      'amateur',
+    ])
+  })
+
   it('the manual override outranks name matching in both directions', () => {
     const games = [
       candidateGame('forced-in', { blackName: 'Kato', override: true }),

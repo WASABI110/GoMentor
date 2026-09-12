@@ -119,6 +119,7 @@ if (!gotLock) {
       llm: created.llm,
       engine: created.engine,
       batch: created.batch,
+      analysis: created.analysis,
       now: () => new Date().toISOString(),
       // A locale change rebuilds the whole menu rather than patching labels:
       // Electron replaces the menu wholesale, so there is no partial-update path

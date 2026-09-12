@@ -6,6 +6,7 @@ import {
   engineInfoSchema,
 } from './types/analysis'
 import { batchProgressSchema, batchStatusSchema, batchScopeSchema } from './types/batch'
+import { profileSnapshotSchema } from './types/profile'
 import { chatChunkSchema, chatContextSchema, chatMessageSchema } from './types/chat'
 import { secretKeySchema, settingsPatchSchema, settingsSchema } from './types/settings'
 import { errorEnvelopeSchema } from './types/errors'
@@ -201,6 +202,18 @@ export const CHANNELS = {
   'batch:status': {
     request: empty,
     response: batchStatusSchema,
+  },
+  /**
+   * The student profile (M4 Stage 3), derived on demand from the persisted
+   * analysis rows of the student's own games — pure core, milliseconds, no
+   * snapshot to invalidate. The response carries the three named weaknesses
+   * plus the counts the panel needs to say "run the batch analysis" when
+   * nothing is analysed yet. An empty weaknesses list is a state, not an
+   * error: a student with no classified weaknesses has nothing to show.
+   */
+  'profile:get': {
+    request: empty,
+    response: profileSnapshotSchema,
   },
 } as const
 

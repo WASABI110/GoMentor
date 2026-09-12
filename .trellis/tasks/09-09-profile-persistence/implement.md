@@ -40,11 +40,11 @@ pnpm exec tsx apps/desktop/scripts/sqlite-abi.ts node   # 原生绑定探测（�
 
 ## Stage 3 — 画像纯核心（R3；C3/C4）
 
-- [ ] `core/profile/mine.ts`：判定谓词（名字匹配大小写不敏感任一方 + override 三态优先）
-- [ ] `core/profile/categories.ts`：四类别分类器（阈值常量集中）+ 几何推导（棋盘重放取接触距离/候选距离——复用 core 既有 board 模块，不复制）
-- [ ] `core/profile/profile.ts`：EMA（半衰期常量）+ 三弱项 + 证据装配
-- [ ] 单测 + 变异：阈值边界、优先级、半衰期、"LLM 无法参与"的输入面（分类器签名只吃分析行与几何——类型层面锁死）
-- [ ] `ipc/profile.handlers.ts` + `profile:get`（A9 覆盖）
+- [x] `core/profile/mine.ts`：判定谓词（名字匹配大小写不敏感任一方 + override 三态优先）
+- [x] `core/profile/categories.ts`：四类别分类器（阈值常量集中）+ 几何推导（棋盘重放取接触距离/候选距离——复用 core 既有 board 模块，不复制）
+- [x] `core/profile/profile.ts`：EMA（半衰期常量）+ 三弱项 + 证据装配
+- [x] 单测 + 变异：阈值边界、优先级、半衰期、"LLM 无法参与"的输入面（分类器签名只吃分析行与几何——类型层面锁死）
+- [x] `ipc/profile.handlers.ts` + `profile:get`（A9 覆盖）
 
 **门禁证据**：变异全捕获；纯核毫秒级（benchmark 注释记录量级）。验收：C3、C4。
 

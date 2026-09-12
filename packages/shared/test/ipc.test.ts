@@ -359,6 +359,79 @@ const CASES: Record<ChannelName, ChannelCase> = {
       { status: 'idle', total: 0, done: 1, failed: 0 },
     ],
   },
+  'profile:get': {
+    validRequest: {},
+    invalidRequests: [null, 'profile', 42],
+    validResponse: {
+      weaknesses: [
+        {
+          category: 'opening-direction',
+          score: 0.07,
+          trend: 'worsening',
+          evidence: [{ gameId: 'g1', moveNumber: 3, loss: 0.2 }],
+        },
+      ],
+      myGames: 4,
+      analysedMyGames: 2,
+    },
+    invalidResponses: [
+      {},
+      // Four weaknesses: the core names at most three.
+      {
+        weaknesses: [
+          'opening-direction',
+          'middlegame-fighting',
+          'endgame-precision',
+          'whole-board-blindspot',
+        ].map((category) => ({
+          category,
+          score: 0.1,
+          trend: 'steady',
+          evidence: [{ gameId: 'g1', moveNumber: 1, loss: 0.1 }],
+        })),
+        myGames: 1,
+        analysedMyGames: 1,
+      },
+      // More than three evidence rows on one weakness.
+      {
+        weaknesses: [
+          {
+            category: 'opening-direction',
+            score: 0.1,
+            trend: 'steady',
+            evidence: [1, 2, 3, 4].map((n) => ({
+              gameId: 'g1',
+              moveNumber: n,
+              loss: 0.1,
+            })),
+          },
+        ],
+        myGames: 1,
+        analysedMyGames: 1,
+      },
+      // The category enum is closed — the classifier's set is the authority.
+      {
+        weaknesses: [
+          {
+            category: 'direction-opening',
+            score: 0.1,
+            trend: 'steady',
+            evidence: [],
+          },
+        ],
+        myGames: 1,
+        analysedMyGames: 1,
+      },
+      // A weakness with no evidence cannot exist: eligibility is a mark.
+      {
+        weaknesses: [
+          { category: 'opening-direction', score: 0.1, trend: 'steady', evidence: [] },
+        ],
+        myGames: 1,
+        analysedMyGames: 1,
+      },
+    ],
+  },
 }
 
 const EVENT_CASES: Record<

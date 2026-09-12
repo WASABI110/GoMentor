@@ -9,6 +9,7 @@ import {
   type ChannelName,
   type IpcResult,
   type Locale,
+  type ProfileSnapshot,
   type SecretKey,
 } from '@gomentor/shared'
 // Type-only, so this is erased at compile time and does not load the module
@@ -97,6 +98,8 @@ vi.mock('electron', () => ({
 // Imported after `vi.mock` so the mocked `electron` is what these modules bind.
 const { registerAllHandlers } = await import('../../src/main/ipc/index')
 const { createGameStore } = await import('../../src/main/library/store')
+const { createAnalysisRepository } =
+  await import('../../src/main/db/repositories/analysis')
 const { createSettingsService } = await import('../../src/main/settings')
 const { openDatabase } = await import('../../src/main/db/connection')
 
@@ -275,6 +278,7 @@ beforeEach(() => {
     llm,
     engine,
     batch,
+    analysis: createAnalysisRepository(db),
     now: () => NOW,
     relabelMenu: (locale) => relabelCalls.push(locale),
   })
@@ -344,6 +348,7 @@ describe('registration covers the contract', () => {
         llm,
         engine,
         batch,
+        analysis: createAnalysisRepository(db),
         now: () => NOW,
         relabelMenu: (locale) => relabelCalls.push(locale),
       })
@@ -414,6 +419,7 @@ describe('the boundary rejects bad requests', () => {
       llm,
       engine,
       batch,
+      analysis: createAnalysisRepository(db),
       now: () => NOW,
       relabelMenu: (locale) => relabelCalls.push(locale),
     })
@@ -803,6 +809,82 @@ describe('batch channels', () => {
   })
 })
 
+describe('profile channels', () => {
+  /** Real rows in the real ledger for one game id (the store holds the game). */
+  function seedRows(gameId: string): void {
+    createAnalysisRepository(db).commitChunk(gameId, [
+      {
+        moveNumber: 1,
+        player: 'white',
+        winrate: 0.42,
+        scoreLead: -2,
+        winrateLoss: 0.06,
+        topCandidateCoord: 'Q16',
+        topCandidateWinrate: 0.48,
+      },
+    ])
+  }
+
+  it('derives the snapshot from the student’s analysed games', async () => {
+    await invoke('settings:set', { patch: { profile: { playerNames: ['Black'] } } })
+    const id = await importOne() // PB[Black] — a name match, so mine
+    seedRows(id)
+
+    const result = await invoke('profile:get', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    const snapshot = result.data as ProfileSnapshot
+    expect(snapshot.myGames).toBe(1)
+    expect(snapshot.analysedMyGames).toBe(1)
+    // Move 1 lost 6 points: the opening-direction weakness, with the
+    // click-through evidence naming the game and the move.
+    expect(snapshot.weaknesses).toHaveLength(1)
+    expect(snapshot.weaknesses[0]?.category).toBe('opening-direction')
+    expect(snapshot.weaknesses[0]?.evidence).toEqual([
+      { gameId: id, moveNumber: 1, loss: 0.06 },
+    ])
+  })
+
+  it('a professional game is not the student’s, by rank, absent an override', async () => {
+    await invoke('settings:set', { patch: { profile: { playerNames: ['Black'] } } })
+    // Name matches, rank says professional: excluded by default (C4).
+    await invoke('sgf:parse', {
+      content: '(;GM[1]FF[4]CA[UTF-8]SZ[19]PB[Black]BR[9p]PW[White];B[pp])',
+    })
+    const result = await invoke('profile:get', {})
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data as ProfileSnapshot).toEqual({
+      weaknesses: [],
+      myGames: 0,
+      analysedMyGames: 0,
+    })
+  })
+
+  it('counts unanalysed my-games without deriving weaknesses from them', async () => {
+    await invoke('settings:set', { patch: { profile: { playerNames: ['Black'] } } })
+    await importOne() // mine, no rows yet
+    const result = await invoke('profile:get', {})
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data as ProfileSnapshot).toEqual({
+      weaknesses: [],
+      myGames: 1,
+      analysedMyGames: 0,
+    })
+  })
+
+  it('a game that is not the student’s contributes nothing', async () => {
+    const id = await importOne() // PB[Black], but no names configured
+    seedRows(id)
+    const result = await invoke('profile:get', {})
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data as ProfileSnapshot).toEqual({
+      weaknesses: [],
+      myGames: 0,
+      analysedMyGames: 0,
+    })
+  })
+})
+
 describe('every channel is exercised', () => {
   it('leaves no channel untested', () => {
     // A9's spirit applied here: a coverage claim that is not itself checked
@@ -827,6 +909,7 @@ describe('every channel is exercised', () => {
       'batch:start',
       'batch:cancel',
       'batch:status',
+      'profile:get',
     ]
     expect([...exercised].sort()).toEqual([...CHANNEL_NAMES].sort())
   })

@@ -160,6 +160,12 @@ Stops the active run. In-flight engine queries are aborted (the engine is told, 
 
 The synchronous batch snapshot: `batchStatusSchema` — the same shape [`batch:progress`](#batchprogress) pushes, minus the terminal states. A panel mounting after the run started has missed the first emissions and asks; a panel mounting with no run running sees `idle` with zeroed counts.
 
+### `profile:get`
+
+The student profile, derived on demand: `{}` → `profileSnapshotSchema` — at most three weaknesses (`category` | `score` | `trend` | up to three `evidence` rows of `{ gameId, moveNumber, loss }`), plus `myGames` / `analysedMyGames`. Nothing is stored: main replays the persisted analysis rows through the pure core (`packages/core/src/profile`) on every call, so an invalidated game simply stops contributing until re-analysed — there is no snapshot to go stale.
+
+"Own games" is the same predicate the batch tier's `mine` scope queues through (`core/profile/mine.ts`): the manual override outranks the professional-rank exclusion, which outranks the case-insensitive either-colour name match against `profile.playerNames`. An empty weaknesses list is a state, not an error — a student with nothing classified simply has an empty panel; the counts are what let the UI say "run the batch analysis" instead of showing weaknesses over zero analysed games.
+
 ## Events
 
 Main → renderer, one-way. Payload schemas are `EVENTS` in [`ipc.ts:116`](../packages/shared/src/ipc.ts#L116).

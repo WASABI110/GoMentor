@@ -447,6 +447,8 @@ export function toSummary(game: Game): GameSummary {
     source: game.source,
     ...(game.meta.blackName === undefined ? {} : { blackName: game.meta.blackName }),
     ...(game.meta.whiteName === undefined ? {} : { whiteName: game.meta.whiteName }),
+    ...(game.meta.blackRank === undefined ? {} : { blackRank: game.meta.blackRank }),
+    ...(game.meta.whiteRank === undefined ? {} : { whiteRank: game.meta.whiteRank }),
     ...(game.meta.date === undefined ? {} : { date: game.meta.date }),
     ...(game.meta.event === undefined ? {} : { event: game.meta.event }),
     ...(game.meta.result === undefined ? {} : { result: game.meta.result }),

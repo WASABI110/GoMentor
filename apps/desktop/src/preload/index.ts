@@ -181,6 +181,10 @@ const api = Object.freeze({
       invoke('batch:status', request),
   }),
 
+  profile: Object.freeze({
+    get: (request: ChannelRequest<'profile:get'>) => invoke('profile:get', request),
+  }),
+
   onLlmDelta: (listener: (payload: EventPayload<'llm:delta'>) => void) =>
     subscribe('llm:delta', listener),
   onLlmDone: (listener: (payload: EventPayload<'llm:done'>) => void) =>

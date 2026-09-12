@@ -1,8 +1,9 @@
 /**
- * Mutation harness for the M4 profile-input pipeline — Stage 2's batch
- * analysis (queue planning, resume planning, winrate-loss projection, the
- * query builder, and the ledger-driven driver) plus the "my game" predicate
- * the `mine` scope and Stage 3's profile both filter through.
+ * Mutation harness for the M4 profile pipeline — the "my game" predicate, the
+ * four-category classifier, the EMA and weakness assembly (Stage 3), and the
+ * batch tier that produces their input (Stage 2: queue planning, resume
+ * planning, winrate-loss projection, the query builder, the ledger-driven
+ * driver).
  *
  * A passing suite proves the code does not crash. It does not prove the
  * assertions are load-bearing. This deliberately breaks each decision the
@@ -22,17 +23,16 @@
  * act on is not a gate, and exit 0 under `*** ESCAPED ***` lines is exactly
  * the green-that-isn't this harness exists to prevent.
  *
- * Four suites run per mutation, one vitest invocation: the pure queue/resume
- * core (`test/unit/batch-plan`), the mine predicate (`test/unit/mine`), the
- * batch query builder next to its session siblings
- * (`test/unit/katago/katago-session`), and the ledger-driven driver against
- * the real engine service and a real database file
- * (`test/integration/batch`). The driver mutants (yield, waves, chunk flush,
- * abort policy, accounting) are only observable through the integration
- * suite; the pure mutants are caught by the unit suites before integration
- * even starts. Filters are relative to the *project* root, not the repo
- * root — the exact mistake the baseline gate exists to catch, since a filter
- * that matches nothing exits 0.
+ * Two vitest invocations run per mutation, summed: the core project's
+ * profile suites (`test/profile` — predicate, classifier, assembly) and the
+ * desktop project's batch suites (pure queue/resume core, batch query
+ * builder, ledger-driven driver against the real engine service and a real
+ * database file). The driver mutants (yield, waves, chunk flush, abort
+ * policy, accounting) are only observable through the integration suite; the
+ * pure mutants are caught by the unit suites before integration even starts.
+ * Filters are relative to the *project* root, not the repo root — the exact
+ * mistake the baseline gate exists to catch, since a filter that matches
+ * nothing exits 0.
  *
  * Deliberately not covered here, with the reason each exclusion is safe:
  *
@@ -53,6 +53,10 @@
  *   sibling field `.threadsPerPosition` is numerically identical (both 2),
  *   so a mutant there reports green without testing anything. The wave
  *   arithmetic mutants (D3/D4) cover the window logic itself.
+ * - `candidateCoord`'s null and `'pass'` guards: both behaviourally
+ *   redundant with `fromGtp` (which maps pass to null and throws on the
+ *   rest, caught just below) — a mutant there is identical code, not
+ *   weakened code. C11 removes the catch itself, which is the real claim.
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -60,10 +64,12 @@ import { resolve } from 'node:path'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g')
-const MINE = 'apps/desktop/src/main/library/mine.ts'
+const MINE = 'packages/core/src/profile/mine.ts'
 const PLAN = 'apps/desktop/src/main/katago/batch-plan.ts'
 const SESSION = 'apps/desktop/src/main/katago/session.ts'
 const BATCH = 'apps/desktop/src/main/katago/batch.ts'
+const CATEGORIES = 'packages/core/src/profile/categories.ts'
+const PROFILE = 'packages/core/src/profile/profile.ts'
 
 /**
  * `buildBatchQuery`'s opening lines, shared prefix for the B-series anchors.
@@ -152,6 +158,41 @@ const MUTATIONS: Mutation[] = [
     what: 'reject the single-name list (the guard fires on exactly one configured name)',
     from: '  if (wanted.size === 0) return false',
     to: '  if (wanted.size === 1) return false',
+  },
+  {
+    id: 'G9',
+    file: MINE,
+    what: 'drop the professional exclusion (a pro’s losses poison the profile)',
+    from: '  if (isProfessional(names)) return false',
+    to: '  if (false) return false',
+  },
+  {
+    id: 'G10',
+    file: MINE,
+    what: 'invert the professional exclusion (pro games are always claimed)',
+    from: '  if (isProfessional(names)) return false',
+    to: '  if (isProfessional(names)) return true',
+  },
+  {
+    id: 'G11',
+    file: MINE,
+    what: 'let the professional exclusion override the manual claim',
+    from: '  if (override !== undefined) return override',
+    to: '  if (override !== undefined && !isProfessional(names)) return override',
+  },
+  {
+    id: 'G12',
+    file: MINE,
+    what: 'match "pro" anywhere in the rank string ("proud amateur" reads professional)',
+    from: '  return /\\bpro(fessional)?\\b/i.test(rank) || /\\d\\s*p\\b/i.test(rank)',
+    to: '  return /pro/i.test(rank) || /\\d\\s*p\\b/i.test(rank)',
+  },
+  {
+    id: 'G13',
+    file: MINE,
+    what: 'drop the 1p–9p convention from the rank pattern',
+    from: '  return /\\bpro(fessional)?\\b/i.test(rank) || /\\d\\s*p\\b/i.test(rank)',
+    to: '  return /\\bpro(fessional)?\\b/i.test(rank)',
   },
   // --- batch-plan.ts: queue selection, resume planning, loss projection ----
   {
@@ -424,15 +465,15 @@ const MUTATIONS: Mutation[] = [
     id: 'D20',
     file: BATCH,
     what: 'count a finished game twice (the run arithmetic exceeds the queue)',
-    from: "        if (outcome === 'done') run.done += 1\n        else run.failed += 1",
-    to: "        if (outcome === 'done') run.done += 2\n        else run.failed += 1",
+    from: "        if (outcome === 'done' || outcome === 'gone') run.done += 1\n        else run.failed += 1",
+    to: "        if (outcome === 'done' || outcome === 'gone') run.done += 2\n        else run.failed += 1",
   },
   {
     id: 'D21',
     file: BATCH,
     what: 'count a failed game twice (the run arithmetic exceeds the queue)',
-    from: "        if (outcome === 'done') run.done += 1\n        else run.failed += 1",
-    to: "        if (outcome === 'done') run.done += 1\n        else run.failed += 2",
+    from: "        if (outcome === 'done' || outcome === 'gone') run.done += 1\n        else run.failed += 1",
+    to: "        if (outcome === 'done' || outcome === 'gone') run.done += 1\n        else run.failed += 2",
   },
   {
     id: 'D22',
@@ -448,6 +489,190 @@ const MUTATIONS: Mutation[] = [
     from: '      if (current?.game.contentHash !== game.contentHash) {',
     to: '      if (current === undefined) {',
   },
+  // --- categories.ts: the four-category classifier (Stage 3) ----------------
+  {
+    id: 'C1',
+    file: CATEGORIES,
+    what: 'end the opening band one move early (move 25 escapes)',
+    from: '      if (k <= OPENING_MOVES && loss >= MAJOR_LOSS) {',
+    to: '      if (k < OPENING_MOVES && loss >= MAJOR_LOSS) {',
+  },
+  {
+    id: 'C2',
+    file: CATEGORIES,
+    what: 'end the middlegame band one move early (move 150 escapes)',
+    from: '        k > OPENING_MOVES &&\n        k <= ENDGAME_START &&',
+    to: '        k > OPENING_MOVES &&\n        k < ENDGAME_START &&',
+  },
+  {
+    id: 'C3',
+    file: CATEGORIES,
+    what: 'mark zero-loss contact moves (noise floods the fighting category)',
+    from: '        loss > 0 &&',
+    to: '        loss >= 0 &&',
+  },
+  {
+    id: 'C4',
+    file: CATEGORIES,
+    what: 'shrink contact to adjacency (a distance-2 fight goes unmarked)',
+    from: 'nearestOpposing(position, move.coord, opponent) <= CONTACT_DISTANCE',
+    to: 'nearestOpposing(position, move.coord, opponent) < CONTACT_DISTANCE',
+  },
+  {
+    id: 'C5',
+    file: CATEGORIES,
+    what: 'widen the blindspot distance by one (distance-5 misses escape)',
+    from: '        if (chebyshev(missed, move.coord) >= BLINDSPOT_DISTANCE) {',
+    to: '        if (chebyshev(missed, move.coord) > BLINDSPOT_DISTANCE) {',
+  },
+  {
+    id: 'C6',
+    file: CATEGORIES,
+    what: 'raise the blindspot loss bar past the major bar (exactly-5% misses escape)',
+    from: '      if (loss >= MAJOR_LOSS && missed !== null) {',
+    to: '      if (loss > MAJOR_LOSS && missed !== null) {',
+  },
+  {
+    id: 'C7',
+    file: CATEGORIES,
+    what: 'measure distance as Manhattan (diagonal contact and blindspots misread)',
+    from: '  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))',
+    to: '  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)',
+  },
+  {
+    id: 'C8',
+    file: CATEGORIES,
+    what: 'count a major endgame blunder toward the small-slip floor',
+    from: '      row.winrateLoss >= ENDGAME_SMALL_LOSS &&\n      row.winrateLoss < MAJOR_LOSS',
+    to: '      row.winrateLoss >= ENDGAME_SMALL_LOSS &&\n      row.winrateLoss < 1',
+  },
+  {
+    id: 'C9',
+    file: CATEGORIES,
+    what: 'push the endgame floor past exactly 3 × 1.5 (the boundary case escapes)',
+    from: '    endgameSmallTotal >= ENDGAME_PRECISION_FLOOR',
+    to: '    endgameSmallTotal > ENDGAME_PRECISION_FLOOR',
+  },
+  {
+    id: 'C10',
+    file: CATEGORIES,
+    what: 'start the endgame band at 150, not 151 (the band edges overlap)',
+    from: '      row.moveNumber > ENDGAME_START &&',
+    to: '      row.moveNumber >= ENDGAME_START &&',
+  },
+  {
+    id: 'C11',
+    file: CATEGORIES,
+    what: 'crash on a garbled candidate coordinate instead of skipping it',
+    from: '  try {\n    return fromGtp(value, size)\n  } catch {\n    return null\n  }',
+    to: '  return fromGtp(value, size)',
+  },
+  {
+    id: 'C12',
+    file: CATEGORIES,
+    what: 'keep classifying past an illegal move (positions nobody can vouch for)',
+    from: '    } catch {\n      // The replay stopped (illegal move in the record). Positions after the\n      // stop are not vouchable — the same rule the board replay runs — so the\n      // walk ends here with the marks earned so far.\n      break\n    }',
+    to: '    } catch {\n      continue\n    }',
+  },
+  {
+    id: 'C13',
+    file: CATEGORIES,
+    what: 'drop the setup stones from the classifier’s walk (handicap geometry misreads)',
+    from: "  let position = Position.empty(game.meta.boardSize).setup([\n    ...game.setup.black.map((coord) => ({ coord, player: 'black' as const })),\n    ...game.setup.white.map((coord) => ({ coord, player: 'white' as const })),\n  ])",
+    to: '  let position = Position.empty(game.meta.boardSize)',
+  },
+  {
+    id: 'C14',
+    file: CATEGORIES,
+    what: 'measure contact against the mover’s own stones instead of the opponent’s',
+    from: '      if (stone !== opponent) continue',
+    to: '      if (stone === opponent) continue',
+  },
+  // --- profile.ts: the EMA and the weakness assembly (Stage 3) ---------------
+  {
+    id: 'F1',
+    file: PROFILE,
+    what: 'halve the half-life (the profile forgets five times faster)',
+    from: 'export const HALF_LIFE_GAMES = 10',
+    to: 'export const HALF_LIFE_GAMES = 5',
+  },
+  {
+    id: 'F2',
+    file: PROFILE,
+    what: 'invert the weight decay (the oldest game is the most important)',
+    from: '    const age = values.length - 1 - i',
+    to: '    const age = i',
+  },
+  {
+    id: 'F3',
+    file: PROFILE,
+    what: 'skip the weight normalisation (short libraries read absurdly heavy)',
+    from: '  return weighted / totalWeight',
+    to: '  return weighted',
+  },
+  {
+    id: 'F4',
+    file: PROFILE,
+    what: 'name a fourth weakness',
+    from: '  return { weaknesses: weaknesses.slice(0, WEAKNESS_LIMIT) }',
+    to: '  return { weaknesses: weaknesses.slice(0, WEAKNESS_LIMIT + 1) }',
+  },
+  {
+    id: 'F5',
+    file: PROFILE,
+    what: 'carry a fourth evidence row',
+    from: '      evidence: evidence.slice(0, EVIDENCE_LIMIT),',
+    to: '      evidence: evidence.slice(0, EVIDENCE_LIMIT + 1),',
+  },
+  {
+    id: 'F6',
+    file: PROFILE,
+    what: 'show the smallest losses as evidence (the click-through hides the blunder)',
+    from: '    evidence.sort((a, b) => b.loss - a.loss)',
+    to: '    evidence.sort((a, b) => a.loss - b.loss)',
+  },
+  {
+    id: 'F7',
+    file: PROFILE,
+    what: 'zero the trend epsilon (a float hair reads as a direction)',
+    from: "  if (overall > older + TREND_EPSILON) return 'worsening'\n  if (overall < older - TREND_EPSILON) return 'improving'",
+    to: "  if (overall > older + TREND_EPSILON) return 'worsening'\n  if (overall < older - TREND_EPSILON) return 'improving'\n  if (overall !== older) return overall > older ? 'worsening' : 'improving'",
+  },
+  {
+    id: 'F8',
+    file: PROFILE,
+    what: 'compare the trend against the whole series (nothing is ever worsening)',
+    from: '  const mid = Math.floor(values.length / 2)',
+    to: '  const mid = values.length',
+  },
+  {
+    id: 'F9',
+    file: PROFILE,
+    what: 'emit zero-evidence categories (a weakness with nothing to click)',
+    from: '    if (evidence.length === 0) continue',
+    to: '    if (false) continue',
+  },
+  {
+    id: 'F10',
+    file: PROFILE,
+    what: 'skip the time-axis sort (input order decides recency)',
+    from: '  const ordered = [...games].sort((a, b) => a.importedAt.localeCompare(b.importedAt))',
+    to: '  const ordered = [...games]',
+  },
+  {
+    id: 'F11',
+    file: PROFILE,
+    what: 'count marks instead of summing losses (every slip weighs the same)',
+    from: '      (total, mark) => (mark.category === category ? total + mark.loss : total),',
+    to: '      (total, mark) => (mark.category === category ? total + 1 : total),',
+  },
+  {
+    id: 'F12',
+    file: PROFILE,
+    what: 'call a single game a trend (one data point is not a direction)',
+    from: "  if (values.length < 2) return 'steady'",
+    to: "  if (values.length < 1) return 'steady'",
+  },
 ]
 
 interface SuiteResult {
@@ -456,24 +681,13 @@ interface SuiteResult {
   ok: boolean
 }
 
-function runSuite(): SuiteResult {
+function runProject(project: string, filters: string[]): SuiteResult {
   let output: string
   let ok: boolean
   try {
     output = execFileSync(
       'pnpm',
-      [
-        'vitest',
-        'run',
-        '--project',
-        'desktop',
-        'test/unit/batch-plan',
-        'test/unit/mine',
-        'test/unit/katago/katago-session',
-        'test/integration/batch',
-        '--reporter',
-        'basic',
-      ],
+      ['vitest', 'run', '--project', project, ...filters, '--reporter', 'basic'],
       {
         cwd: ROOT,
         encoding: 'utf8',
@@ -489,6 +703,25 @@ function runSuite(): SuiteResult {
   }
   const parsed = parse(output)
   return { total: parsed.total, failed: parsed.failed, ok }
+}
+
+function runSuite(): SuiteResult {
+  // The profile core (mine predicate, classifier, EMA) is `packages/core` and
+  // its suites run under the core project; the batch tier's pure core, query
+  // builder, and ledger-driven driver run under desktop. Two invocations,
+  // summed — a mutation that breaks collection in either changes the total
+  // and is INVALID.
+  const core = runProject('core', ['test/profile'])
+  const desktop = runProject('desktop', [
+    'test/unit/batch-plan',
+    'test/unit/katago/katago-session',
+    'test/integration/batch',
+  ])
+  return {
+    total: core.total + desktop.total,
+    failed: core.failed + desktop.failed,
+    ok: core.ok && desktop.ok,
+  }
 }
 
 function parse(output: string): { total: number; failed: number } {

@@ -1,7 +1,7 @@
 import { toGtp } from '@gomentor/core/board/coords'
+import { isMyGame } from '@gomentor/core/profile/mine'
 import type { AnalysisResult, BatchScope, BoardSize } from '@gomentor/shared'
 import type { AnalysisRow } from '../db/repositories/analysis'
-import { isMyGame } from '../library/mine'
 
 /**
  * The batch tier's pure decision core: queue selection, per-game resume
@@ -125,6 +125,8 @@ export interface QueueCandidate {
   readonly id: string
   readonly blackName?: string | undefined
   readonly whiteName?: string | undefined
+  readonly blackRank?: string | undefined
+  readonly whiteRank?: string | undefined
   readonly override: boolean | undefined
   readonly ledgerStatus: 'pending' | 'done' | 'failed' | null
 }
@@ -136,9 +138,11 @@ export interface QueueCandidate {
  *   re-analysed (C2). `failed` and `pending` are queued — `failed` gets its
  *   next-run retry, `pending` resumes (from its persisted rows mid-game, or
  *   from scratch when nothing was committed).
- * - `mine` filters through the pure `isMyGame` predicate: the manual override
- *   outranks a case-insensitive either-colour name match against
- *   `settings.profile.playerNames`.
+ * - `mine` filters through the pure `isMyGame` predicate (`core/profile`):
+ *   the manual override outranks the professional exclusion, which outranks a
+ *   case-insensitive either-colour name match against
+ *   `settings.profile.playerNames`. One predicate defines "my game" for the
+ *   batch scope and the profile alike, so the two can never disagree.
  */
 export function planQueue(
   games: readonly QueueCandidate[],

@@ -84,6 +84,44 @@ describe('analysis repository', () => {
     }
   })
 
+  it('rowsFor reads every persisted row in move order — the profile derivation’s reader', () => {
+    const testDb = createTestDb()
+    try {
+      const store = createGameStore(testDb.db)
+      seedGame(store, 'g1')
+      const repository = createAnalysisRepository(testDb.db)
+
+      repository.commitChunk('g1', [
+        row(1, { winrate: 0.61, winrateLoss: 0.02, topCandidateCoord: 'Q16' }),
+        row(2, { winrate: 0.62, winrateLoss: -0.01, topCandidateCoord: null }),
+      ])
+
+      expect(repository.rowsFor('g1')).toEqual([
+        {
+          moveNumber: 1,
+          player: 'white',
+          winrate: 0.61,
+          scoreLead: 1.5,
+          winrateLoss: 0.02,
+          topCandidateCoord: 'Q16',
+          topCandidateWinrate: 0.55,
+        },
+        {
+          moveNumber: 2,
+          player: 'black',
+          winrate: 0.62,
+          scoreLead: 1.5,
+          winrateLoss: -0.01,
+          topCandidateCoord: null,
+          topCandidateWinrate: 0.55,
+        },
+      ])
+      expect(repository.rowsFor('g2')).toEqual([])
+    } finally {
+      testDb.cleanup()
+    }
+  })
+
   it('an empty chunk is a no-op, not a transaction ceremony', () => {
     const testDb = createTestDb()
     try {

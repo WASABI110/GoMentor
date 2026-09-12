@@ -6,9 +6,11 @@ import { registerSettingsHandlers } from './settings.handlers'
 import { registerLlmHandlers } from './llm.handlers'
 import { registerEngineHandlers } from './engine.handlers'
 import { registerBatchHandlers } from './batch.handlers'
+import { registerProfileHandlers } from './profile.handlers'
 import type { Locale } from '@gomentor/shared'
 import type { EngineService } from '../katago/service'
 import type { BatchService } from '../katago/batch'
+import type { AnalysisRepository } from '../db/repositories/analysis'
 import type { GameStore } from '../library/store'
 import type { LlmService } from '../llm/service'
 import type { SecretsService } from '../safe-storage'
@@ -33,6 +35,8 @@ export interface Dependencies {
   engine: EngineService
   /** The batch scheduler (M4). Lazy like the engine: started by `batch:start`. */
   batch: BatchService
+  /** The analysis ledger and rows (M4): the profile derivation reads it on demand. */
+  analysis: AnalysisRepository
   /**
    * Injected rather than called directly so handler tests are deterministic —
    * `importedAt` otherwise makes every expected value a moving target.
@@ -61,6 +65,11 @@ export function registerAllHandlers(deps: Dependencies): void {
   registerLlmHandlers(deps.llm)
   registerEngineHandlers(deps.engine)
   registerBatchHandlers(deps.batch)
+  registerProfileHandlers({
+    store: deps.store,
+    repository: deps.analysis,
+    settings: deps.settings,
+  })
 }
 
 export { removeAllHandlers }

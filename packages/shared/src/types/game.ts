@@ -162,6 +162,14 @@ export const gameSummarySchema = z.object({
   id: z.string().min(1),
   blackName: z.string().optional(),
   whiteName: z.string().optional(),
+  /**
+   * SGF `BR`/`WR`, when the record carries one. Additive in M4: the profile's
+   * "my game" predicate excludes professional games by default (C4), and a
+   * filter that loaded every full record to read one rank field would defeat
+   * the reason summaries exist — the same argument M3 made for `event`.
+   */
+  blackRank: z.string().optional(),
+  whiteRank: z.string().optional(),
   date: z.string().optional(),
   /**
    * SGF `EV`, when the record carries one. Additive in M3: the agent's

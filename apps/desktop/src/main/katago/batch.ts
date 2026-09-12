@@ -409,6 +409,11 @@ export function createBatchService(options: BatchServiceOptions): BatchService {
             id: summary.id,
             blackName: summary.blackName,
             whiteName: summary.whiteName,
+            // Ranks ride on the summary (M4 additive, like `event`): the mine
+            // scope's professional exclusion reads them without loading every
+            // full record.
+            blackRank: summary.blackRank,
+            whiteRank: summary.whiteRank,
             override: options.store.getIsMineOverride(summary.id),
             ledgerStatus: ledger.get(summary.id) ?? null,
           })),

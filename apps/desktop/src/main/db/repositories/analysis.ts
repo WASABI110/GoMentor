@@ -53,6 +53,13 @@ export interface AnalysisRepository {
   persistedMoves(gameId: string): number[]
   /** The persisted winrate at `moveNumber` — the resume seed for the next row. */
   winrateAt(gameId: string, moveNumber: number): number | undefined
+  /**
+   * Every persisted row of a game, in move order — the reader the profile
+   * derives from (`profile:get`). Rows are read as stored, so a mid-run
+   * checkpoint prefix classifies as far as it goes; the profile is derived on
+   * demand and simply grows as the run commits more.
+   */
+  rowsFor(gameId: string): AnalysisRow[]
   /** Mid-game checkpoint: rows only; the ledger stays `pending`. */
   commitChunk(gameId: string, rows: readonly AnalysisRow[]): void
   /** Final rows + ledger `done` in ONE transaction (done ⟹ all rows present). */
@@ -74,6 +81,18 @@ export function createAnalysisRepository(db: SqliteDatabase): AnalysisRepository
   const selectWinrate = db.prepare<[string, number], { winrate: number }>(
     'SELECT winrate FROM analysis WHERE game_id = ? AND move_number = ?',
   )
+  const selectRows = db.prepare<
+    [string],
+    {
+      move_number: number
+      player: string
+      winrate: number
+      score_lead: number
+      winrate_loss: number
+      top_candidate_coord: string | null
+      top_candidate_winrate: number | null
+    }
+  >('SELECT * FROM analysis WHERE game_id = ? ORDER BY move_number')
   const insertRow = db.prepare<{
     game_id: string
     move_number: number
@@ -141,6 +160,19 @@ export function createAnalysisRepository(db: SqliteDatabase): AnalysisRepository
     },
     winrateAt(gameId, moveNumber) {
       return selectWinrate.get(gameId, moveNumber)?.winrate
+    },
+    rowsFor(gameId) {
+      // The narrowing mirrors `toStatus`: the CHECK constraint guarantees the
+      // player enum, and the mapping keeps the row shape honest at the seam.
+      return selectRows.all(gameId).map((row) => ({
+        moveNumber: row.move_number,
+        player: row.player === 'black' ? ('black' as const) : ('white' as const),
+        winrate: row.winrate,
+        scoreLead: row.score_lead,
+        winrateLoss: row.winrate_loss,
+        topCandidateCoord: row.top_candidate_coord,
+        topCandidateWinrate: row.top_candidate_winrate,
+      }))
     },
     commitChunk(gameId, rows) {
       if (rows.length === 0) return
