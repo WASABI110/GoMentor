@@ -133,7 +133,7 @@ function subscribe<E extends EventName>(
  * much a finding as a missing one.
  */
 const api = Object.freeze({
-  version: '0.1.0',
+  version: '1.0.0',
 
   sgf: Object.freeze({
     parse: (request: ChannelRequest<'sgf:parse'>) => invoke('sgf:parse', request),

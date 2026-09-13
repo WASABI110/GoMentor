@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../components/BaseLayout.astro'
+import { ZH } from '../content'
+---
+<BaseLayout lang="zh-CN" pathPrefix="" strings={ZH}>
+  <h1>{ZH.docs.headline}</h1>
+  <ol>
+    {ZH.docs.steps.map((step) => <li>{step}</li>)}
+  </ol>
+  <h2>{ZH.docs.telemetryTitle}</h2>
+  <p>{ZH.docs.telemetryBody}</p>
+  <h2>{ZH.docs.licenseTitle}</h2>
+  <p>{ZH.docs.licenseBody}</p>
+</BaseLayout>

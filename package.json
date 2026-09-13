@@ -1,6 +1,6 @@
 {
   "name": "gomentor",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "A desktop Go (围棋) AI learning platform: KataGo analysis with an LLM coaching layer",

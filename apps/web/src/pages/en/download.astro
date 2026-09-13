@@ -1,0 +1,21 @@
+---
+import BaseLayout from '../../components/BaseLayout.astro'
+import { EN } from '../../content'
+
+const RELEASES = 'https://github.com/WASABI110/GoMentor/releases'
+---
+<BaseLayout lang="en" pathPrefix="/en" strings={EN}>
+  <h1>{EN.download.headline}</h1>
+  <div class="features">
+    {EN.download.platforms.map((p) => (
+      <section>
+        <h3>{p.os}</h3>
+        <p>{p.note}</p>
+      </section>
+    ))}
+  </div>
+  <p>
+    <a class="cta" href={RELEASES}>{EN.download.button}</a>
+  </p>
+  <p>{EN.download.note}</p>
+</BaseLayout>

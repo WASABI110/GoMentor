@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../components/BaseLayout.astro'
+import { ZH } from '../content'
+---
+<BaseLayout lang="zh-CN" pathPrefix="" strings={ZH}>
+  <section class="hero">
+    <h1>{ZH.hero.headline}</h1>
+    <p>{ZH.hero.sub}</p>
+    <a class="cta" href="/download">{ZH.hero.cta}</a>
+  </section>
+  <div class="features">
+    {ZH.features.map((f) => (
+      <section>
+        <h3>{f.title}</h3>
+        <p>{f.body}</p>
+      </section>
+    ))}
+  </div>
+</BaseLayout>

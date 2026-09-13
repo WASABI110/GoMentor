@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../../components/BaseLayout.astro'
+import { EN } from '../../content'
+---
+<BaseLayout lang="en" pathPrefix="/en" strings={EN}>
+  <h1>{EN.docs.headline}</h1>
+  <ol>
+    {EN.docs.steps.map((step) => <li>{step}</li>)}
+  </ol>
+  <h2>{EN.docs.telemetryTitle}</h2>
+  <p>{EN.docs.telemetryBody}</p>
+  <h2>{EN.docs.licenseTitle}</h2>
+  <p>{EN.docs.licenseBody}</p>
+</BaseLayout>

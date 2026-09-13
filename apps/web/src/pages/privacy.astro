@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../components/BaseLayout.astro'
+import { ZH } from '../content'
+---
+<BaseLayout lang="zh-CN" pathPrefix="" strings={ZH}>
+  <h1>{ZH.privacy.headline}</h1>
+  <p>{ZH.privacy.intro}</p>
+  {ZH.privacy.sections.map((s) => (
+    <section>
+      <h2>{s.title}</h2>
+      <p>{s.body}</p>
+    </section>
+  ))}
+</BaseLayout>

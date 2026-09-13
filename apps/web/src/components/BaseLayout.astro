@@ -1,0 +1,109 @@
+---
+/**
+ * The shared page shell. Props carry the locale and the translated strings —
+ * no i18n library, by the same reasoning as astro.config.mjs: the site has
+ * six pages, and a `Content` object per locale beats an abstraction.
+ *
+ * Zero-JS by construction: no <script> tag exists anywhere in the site. The
+ * GitHub link is the only outbound navigation.
+ */
+export interface SiteStrings {
+  readonly title: string
+  readonly tagline: string
+  readonly description: string
+  readonly nav: { readonly download: string; readonly docs: string; readonly privacy: string }
+  readonly hero: {
+    readonly headline: string
+    readonly sub: string
+    readonly cta: string
+  }
+  readonly features: readonly { readonly title: string; readonly body: string }[]
+  readonly footer: string
+}
+
+interface Props {
+  readonly lang: 'zh-CN' | 'en'
+  readonly pathPrefix: string
+  readonly strings: SiteStrings
+}
+
+const { lang, pathPrefix, strings } = Astro.props
+const GITHUB = 'https://github.com/WASABI110/GoMentor'
+const RELEASES = `${GITHUB}/releases`
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{strings.title} — {strings.tagline}</title>
+    <meta name="description" content={strings.description} />
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --paper: #f7f5f0;
+        --accent: #2d5a3d;
+        --line: #d8d3c8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: var(--ink);
+        background: var(--paper);
+        line-height: 1.6;
+      }
+      main { max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+      header {
+        border-bottom: 1px solid var(--line);
+        padding: 1rem 1.25rem;
+        display: flex; gap: 1.5rem; align-items: baseline; flex-wrap: wrap;
+      }
+      header .brand { font-weight: 700; font-size: 1.1rem; }
+      header nav { display: flex; gap: 1rem; }
+      header nav a { color: var(--ink); text-decoration: none; }
+      header nav a:hover { color: var(--accent); }
+      .hero { padding: 3rem 0 2rem; }
+      .hero h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+      .hero p { font-size: 1.1rem; margin: 0 0 1.5rem; }
+      .cta {
+        display: inline-block;
+        background: var(--accent); color: #fff;
+        padding: 0.6rem 1.4rem; border-radius: 6px; text-decoration: none;
+      }
+      .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+      .features section { border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; background: #fff; }
+      .features h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+      .features p { margin: 0; font-size: 0.92rem; }
+      footer { border-top: 1px solid var(--line); padding: 1rem 1.25rem; font-size: 0.85rem; color: #666; }
+      footer a { color: inherit; }
+      h2 { margin-top: 2.5rem; }
+      .lang-switch { margin-left: auto; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="brand">GoMentor</span>
+      <nav>
+        <a href={`${pathPrefix}/`}>{strings.nav.download === '下载' ? '首页' : 'Home'}</a>
+        <a href={`${pathPrefix}/download`}>{strings.nav.download}</a>
+        <a href={`${pathPrefix}/docs`}>{strings.nav.docs}</a>
+        <a href={`${pathPrefix}/privacy`}>{strings.nav.privacy}</a>
+      </nav>
+      <span class="lang-switch">
+        {pathPrefix === '' ? <a href="/en/">English</a> : <a href="/">中文</a>}
+      </span>
+      <span class="lang-switch"><a href={GITHUB}>GitHub</a></span>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>{strings.footer}</p>
+      <p>
+        <a href={RELEASES}>{RELEASES}</a>
+      </p>
+    </footer>
+  </body>
+</html>

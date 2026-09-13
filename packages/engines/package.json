@@ -1,6 +1,6 @@
 {
   "name": "@gomentor/engines",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "The pinned KataGo engine asset manifest and its verified download pipeline — one authority for the CLI, CI, and the app (M5 Stage 4)",

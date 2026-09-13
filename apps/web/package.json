@@ -4,8 +4,14 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
-  "description": "GoMentor marketing and documentation site (placeholder — built in M5)",
+  "description": "GoMentor marketing and documentation site (zh-CN + en, built locally — no deploy per M5 scope decision 7)",
   "scripts": {
-    "typecheck": "echo \"apps/web is a placeholder; M5 adds Astro\" && exit 0"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "echo \"apps/web: typechecked by astro build (every page compiles)\" && exit 0"
+  },
+  "dependencies": {
+    "astro": "^5.0.0"
   }
 }

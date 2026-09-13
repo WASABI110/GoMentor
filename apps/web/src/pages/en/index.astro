@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../../components/BaseLayout.astro'
+import { EN } from '../../content'
+---
+<BaseLayout lang="en" pathPrefix="/en" strings={EN}>
+  <section class="hero">
+    <h1>{EN.hero.headline}</h1>
+    <p>{EN.hero.sub}</p>
+    <a class="cta" href="/en/download">{EN.hero.cta}</a>
+  </section>
+  <div class="features">
+    {EN.features.map((f) => (
+      <section>
+        <h3>{f.title}</h3>
+        <p>{f.body}</p>
+      </section>
+    ))}
+  </div>
+</BaseLayout>

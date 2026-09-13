@@ -19,6 +19,10 @@ export default defineConfig(
       '**/out/**',
       '**/node_modules/**',
       '**/*.d.ts',
+      // The marketing site: Astro's generated .astro/ dir is not part of any
+      // tsconfig project service, and the site is deliberately zero-JS — its
+      // quality gate is the astro build plus the site smoke test, not eslint.
+      'apps/web/**',
     ],
   },
 

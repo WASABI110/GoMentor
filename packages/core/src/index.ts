@@ -4,4 +4,4 @@
 // Stage 3 fills in sgf/, board/, katago/ (protocol only, no processes), and
 // llm/. A lint rule bars `electron` imports from this package.
 
-export const CORE_PACKAGE_VERSION = '0.1.0'
+export const CORE_PACKAGE_VERSION = '1.0.0'

@@ -1,0 +1,21 @@
+---
+import BaseLayout from '../components/BaseLayout.astro'
+import { ZH } from '../content'
+
+const RELEASES = 'https://github.com/WASABI110/GoMentor/releases'
+---
+<BaseLayout lang="zh-CN" pathPrefix="" strings={ZH}>
+  <h1>{ZH.download.headline}</h1>
+  <div class="features">
+    {ZH.download.platforms.map((p) => (
+      <section>
+        <h3>{p.os}</h3>
+        <p>{p.note}</p>
+      </section>
+    ))}
+  </div>
+  <p>
+    <a class="cta" href={RELEASES}>{ZH.download.button}</a>
+  </p>
+  <p>{ZH.download.note}</p>
+</BaseLayout>

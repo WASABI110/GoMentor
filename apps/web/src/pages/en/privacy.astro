@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../../components/BaseLayout.astro'
+import { EN } from '../../content'
+---
+<BaseLayout lang="en" pathPrefix="/en" strings={EN}>
+  <h1>{EN.privacy.headline}</h1>
+  <p>{EN.privacy.intro}</p>
+  {EN.privacy.sections.map((s) => (
+    <section>
+      <h2>{s.title}</h2>
+      <p>{s.body}</p>
+    </section>
+  ))}
+</BaseLayout>
