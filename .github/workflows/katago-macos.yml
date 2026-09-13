@@ -96,12 +96,23 @@ jobs:
             katago-build/katago
           key: katago-macos-${{ matrix.target }}-${{ env.KATAGO_REF }}-v2
 
+      # Diagnostics are load-bearing here: a failed configure's real error only
+      # exists in the job log, which the unauthenticated API cannot read — so on
+      # failure the step re-emits the error lines as workflow annotations,
+      # which the check-runs API DOES expose.
       - name: Configure (cmake)
         working-directory: katago-src/cpp
         run: |
+          set -o pipefail
           cmake -B ../../katago-build -DCMAKE_BUILD_TYPE=Release \
             -DUSE_BACKEND=${{ matrix.backend }} -DNO_GIT_REVISION=1 \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache 2>&1 | tee configure.log || {
+            echo "::error::cmake configure failed — swiftc: $(xcrun -f swiftc 2>&1), cmake: $(cmake --version | head -1)"
+            grep -iE "error|fatal" configure.log | head -20 | while IFS= read -r line; do
+              echo "::error::${line:0:400}"
+            done
+            exit 1
+          }
 
       - name: Build
         working-directory: katago-build
