@@ -31,25 +31,33 @@ import { engineBinariesDir, weightsResourcesDir } from '../paths'
  * to fetch. The outcome carries the `mode` so the service can make that call.
  */
 
-/** Platforms with an official KataGo Eigen build (`scripts/katago-manifest.ts`). */
-export type EngineTarget = 'win32-x64' | 'linux-x64'
+/**
+ * Platforms with an engine target (`scripts/katago-manifest.ts`). darwin
+ * entries are M5 source builds: GoMentor's CI compiles KataGo for macOS and
+ * the fetch chain ships it, so darwin resolves like any other platform.
+ */
+export type EngineTarget = 'win32-x64' | 'linux-x64' | 'darwin-arm64' | 'darwin-x64'
 
 /** Executable name inside the platform directory, as the fetch script extracts it. */
 const BINARY_NAMES: Record<EngineTarget, string> = {
   'win32-x64': 'katago.exe',
   'linux-x64': 'katago',
+  'darwin-arm64': 'katago',
+  'darwin-x64': 'katago',
 }
 
 /**
  * The platform-arch key for a `process.platform`/`process.arch` pair, or null
- * where no official Eigen build exists. macOS is null **by construction**
- * (scope decision 6 — no macOS binaries are published in any KataGo release),
- * which is what makes `unavailable` the honest darwin state.
+ * where no engine target exists (non-x64 win/linux, unknown combos). darwin
+ * reports a real target since M5's source builds — `unavailable` there now
+ * means "not fetched / not bundled", the same state a dev checkout of any
+ * platform is in before `pnpm fetch:katago`, not a platform verdict.
  */
 export function engineTargetFor(platform: string, arch: string): EngineTarget | null {
-  if (arch !== 'x64') return null
-  if (platform === 'win32') return 'win32-x64'
-  if (platform === 'linux') return 'linux-x64'
+  if (platform === 'win32') return arch === 'x64' ? 'win32-x64' : null
+  if (platform === 'linux') return arch === 'x64' ? 'linux-x64' : null
+  if (platform === 'darwin' && arch === 'arm64') return 'darwin-arm64'
+  if (platform === 'darwin' && arch === 'x64') return 'darwin-x64'
   return null
 }
 
@@ -219,9 +227,8 @@ export function resolveEngineLayout(input: ResolveEngineLayoutInput): LocateOutc
 /**
  * The Electron-bound entry point: gathers `process`/filesystem facts and
  * delegates the decision to `resolveEngineLayout`. The override is honoured
- * on every platform — a macOS build with `GOMENTOR_KATAGO_BINARY` pointing at
- * a working engine is a legitimate diagnostics setup even though no bundled
- * darwin binary exists.
+ * on every platform — pointing at a homebrew build or a script engine is a
+ * legitimate diagnostics setup regardless of what is bundled.
  */
 export function locateBundledEngine(
   env: NodeJS.ProcessEnv = process.env,

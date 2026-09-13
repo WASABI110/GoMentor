@@ -9,13 +9,13 @@
  * ## Layout: per-platform subdirectories
  *
  * The binary lands under `resources/katago/<platform>-<arch>/` (e.g.
- * `win32-x64/`, `linux-x64/`). `electron-builder.yml` selects the matching
- * subdirectory per platform via `extraResources`, so an installer ships only its
- * own OS/arch binary rather than every platform's (the tier is sized for one).
- * There is intentionally **no darwin target**: KataGo publishes no macOS binaries
- * (research `katago-releases.md`), so on macOS this reports that there is nothing
- * to fetch and exits 0 — the app on macOS reports `unavailable` by construction
- * (scope decision 6).
+ * `win32-x64/`, `linux-x64/`, `darwin-arm64/`). `electron-builder.yml` selects
+ * the matching subdirectory per platform via `extraResources`, so an installer
+ * ships only its own OS/arch binary rather than every platform's (the tier is
+ * sized for one). darwin targets fetch the **source builds** GoMentor's own CI
+ * publishes (M5; `katago-manifest.ts` `sourceBuilds`) — there is no official
+ * macOS upstream binary, and platforms with no target at all (linux-arm64
+ * etc.) still exit 0 with an explanatory line.
  *
  * ## The two-stage Linux extraction
  *
@@ -36,6 +36,7 @@ import {
   KATAGO_MANIFEST,
   applyRecordedChecksums,
   currentEngineTarget,
+  engineDownloadBase,
   persistRecordedChecksums,
   readRecordedChecksums,
   type EngineAsset,
@@ -58,7 +59,7 @@ const SPAWNABLE = 'katago'
 /** Fetches one platform target; returns a human-readable outcome line. */
 async function fetchTarget(target: EngineTarget): Promise<string> {
   const asset = KATAGO_MANIFEST.engine.targets[target]
-  const url = `${KATAGO_MANIFEST.engine.downloadBase}/${asset.file}`
+  const url = `${engineDownloadBase(target)}/${asset.file}`
   const dir = engineDir(RESOURCES_ROOT, target)
 
   // Stage 1: download + verify the release zip, resuming across runs. The zip
@@ -118,13 +119,14 @@ async function main(): Promise<void> {
 
   const current = currentEngineTarget()
   if (current === null) {
-    // Not an error: macOS has no official engine build. Exiting 0 lets CI's
-    // macOS packaging job run without a fetch special-case; the app reports
-    // `unavailable` there by construction. A non-zero exit would imply a fetch
-    // was possible and failed, which is not what "no target exists" means.
+    // Not an error: this platform-arch has no engine target at all (e.g.
+    // linux-arm64, windows-arm64). Exiting 0 lets CI run without a fetch
+    // special-case; the app reports `unavailable` there by construction. A
+    // non-zero exit would imply a fetch was possible and failed, which is not
+    // what "no target exists" means.
     console.log(
-      `fetch-katago: no official Eigen build for ${process.platform}-${process.arch}; ` +
-        'nothing to fetch (macOS engine tier is deferred, scope decision 6).',
+      `fetch-katago: no engine build exists for ${process.platform}-${process.arch}; ` +
+        'nothing to fetch (see scripts/katago-manifest.ts for the supported targets).',
     )
     return
   }

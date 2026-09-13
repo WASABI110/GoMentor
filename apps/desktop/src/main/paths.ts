@@ -84,10 +84,9 @@ export function resourcesDir(): string {
 
 /**
  * Bundled engine binaries for one platform-arch, as laid out by the fetch
- * scripts (`resources/katago/<platform>-<arch>/`). Called only for platforms
- * with an official Eigen build (`win32-x64`, `linux-x64`) — darwin has no
- * target and never reaches this (`locate.ts` reports `unavailable` there by
- * construction, scope decision 6).
+ * scripts (`resources/katago/<platform>-<arch>/`). Called for every platform
+ * with an engine target (`win32-x64`, `linux-x64`, and since M5 the darwin
+ * source builds — see `scripts/katago-manifest.ts` `sourceBuilds`).
  */
 export function engineBinariesDir(platformArch: string): string {
   return join(resourcesDir(), 'katago', platformArch)

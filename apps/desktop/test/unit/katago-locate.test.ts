@@ -74,13 +74,13 @@ describe('engineTargetFor', () => {
   it('maps supported platforms to their fetch targets', () => {
     expect(engineTargetFor('win32', 'x64')).toBe('win32-x64')
     expect(engineTargetFor('linux', 'x64')).toBe('linux-x64')
+    // M5 source builds: darwin resolves like any other platform now.
+    expect(engineTargetFor('darwin', 'arm64')).toBe('darwin-arm64')
+    expect(engineTargetFor('darwin', 'x64')).toBe('darwin-x64')
   })
 
-  it('returns null for platforms with no official Eigen build', () => {
-    // macOS is the deliberate one (scope decision 6 — no binaries published).
-    expect(engineTargetFor('darwin', 'arm64')).toBeNull()
-    expect(engineTargetFor('darwin', 'x64')).toBeNull()
-    // And non-x64 architectures of supported platforms have no target either.
+  it('returns null for platform-arch combos with no target', () => {
+    // Non-x64 architectures of supported platforms have no target.
     expect(engineTargetFor('win32', 'arm64')).toBeNull()
     expect(engineTargetFor('linux', 'arm64')).toBeNull()
   })

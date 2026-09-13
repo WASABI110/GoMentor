@@ -8,12 +8,11 @@ import { firstPage, launchEnv, makeUserDataDir } from './harness'
  * The packaged-launch gate (B1, M1 R12 rule at M2 scale): the *packaged* app,
  * launched from `dist/<platform>-unpacked`, must answer for its engine tier —
  *
- * - **Windows / Linux**: reach `ready` against the **real bundled engine** and
- *   land a real analysis readout — no `GOMENTOR_KATAGO_BINARY` override, no
- *   fake.
- * - **macOS**: launch, open a record, and report `unavailable` — no darwin
- *   engine asset exists (scope decision 6), and by construction that absence
- *   must read as a state, never as a crash or a `failed` packaging defect.
+ * - **Windows / Linux / macOS**: reach `ready` against the **real bundled
+ *   engine** and land a real analysis readout — no `GOMENTOR_KATAGO_BINARY`
+ *   override, no fake. (macOS joined at M5: the bundled engine is the CI
+ *   source build, so a packaged launch proves the darwin `extraResources`
+ *   layout exactly like the other two platforms prove theirs.)
  *
  * ## Why this is a separate spec that usually skips
  *
@@ -140,100 +139,64 @@ async function importAndOpen(page: Page): Promise<void> {
   await page.getByTestId('library-list').locator('button.library-row').first().click()
 }
 
-if (process.platform === 'darwin') {
-  test.describe('packaged launch on macOS: the engine is absent by construction', () => {
-    let app: ElectronApplication | undefined
-    let page: Page
-    let cleanupProfile: (() => void) | undefined
+test.describe('packaged launch against the real bundled engine', () => {
+  // `| undefined` because afterAll must tolerate a beforeAll that never
+  // completed — a failed launch is exactly when cleanup matters.
+  let app: ElectronApplication | undefined
+  let page: Page
+  let cleanupProfile: (() => void) | undefined
 
-    test.beforeAll(async () => {
-      const launched = await launchPackaged()
-      app = launched.app
-      page = launched.page
-      cleanupProfile = launched.cleanup
-    })
+  // The Metal backend compiles its shader pipeline on an engine's very first
+  // start under a fresh profile, which can take tens of seconds on a CI
+  // runner (it is cached in userData afterwards). The 30s that fits the
+  // Eigen cold-start becomes 90s on darwin for that one-time compile.
+  const readyTimeout = process.platform === 'darwin' ? 90_000 : 30_000
 
-    test.afterAll(async () => {
-      if (app !== undefined) await app.close()
-      cleanupProfile?.()
-    })
-
-    test('open → the badge reports unavailable, and the record still opens', async () => {
-      await importAndOpen(page)
-
-      // `unavailable`, not `failed`: a missing darwin engine is an expected
-      // absence (no official macOS build exists to bundle — scope decision 6),
-      // not a packaging defect.
-      const badge = page.getByTestId('engine-status')
-      await expect(badge.locator('.engine-status__value--unavailable')).toBeVisible({
-        timeout: 15_000,
-      })
-
-      // And it stays that way — nothing spawns, nothing retries: after a
-      // grace period the badge is still `unavailable` (a start loop would have
-      // flipped it to `starting`/`failed` by now).
-      await page.waitForTimeout(2_000)
-      await expect(badge.locator('.engine-status__value--unavailable')).toBeVisible()
-
-      // Usable without the engine: the record opened and its move count
-      // rendered — the M1 A13 invariant at M2 scale.
-      await expect(page.getByTestId('board-move')).toContainText('53')
-    })
+  test.beforeAll(async () => {
+    const launched = await launchPackaged()
+    app = launched.app
+    page = launched.page
+    cleanupProfile = launched.cleanup
   })
-} else {
-  test.describe('packaged launch against the real bundled engine', () => {
-    // `| undefined` because afterAll must tolerate a beforeAll that never
-    // completed — a failed launch is exactly when cleanup matters.
-    let app: ElectronApplication | undefined
-    let page: Page
-    let cleanupProfile: (() => void) | undefined
 
-    test.beforeAll(async () => {
-      const launched = await launchPackaged()
-      app = launched.app
-      page = launched.page
-      cleanupProfile = launched.cleanup
-    })
-
-    test.afterAll(async () => {
-      if (app !== undefined) await app.close()
-      cleanupProfile?.()
-    })
-
-    test('open → ready → a real analysis readout, with no engine override', async () => {
-      await importAndOpen(page)
-
-      // `ready` is proven, not declared: the 1-visit probe round-tripped through
-      // the production parser inside the packaged app — which required the
-      // bundled binary AND net to have shipped where `locate.ts` resolves them.
-      await expect(
-        page.getByTestId('engine-status').locator('.engine-status__value--ready'),
-      ).toBeVisible({ timeout: 30_000 })
-
-      // A real read: the readout names a percentage and the engine's visit
-      // count for the settings-default 500-visit query. The real engine does
-      // not echo the cap the way the fake does — it overshoots to the next NN
-      // batch boundary (measured: 501) — so the assertion is a range, not an
-      // exact match.
-      await expect(page.getByTestId('analysis-winrate')).toContainText('%', {
-        timeout: 30_000,
-      })
-      // The element is `<i18n label> <count>`; the app boots in zh-CN, so the
-      // number is picked out of the string rather than parsed off the start.
-      // Partial ticks land here long before the search settles (the store takes
-      // both), so poll until the visits reach the settings-default cap rather
-      // than snapshotting the first tick (measured: ~30 visits ~0.5s in, cap
-      // reached ~3.4s in on the reference machine).
-      await expect
-        .poll(
-          async () => {
-            const text = (await page.getByTestId('analysis-visits').innerText()).trim()
-            const match = /\d[\d,]*/.exec(text)
-            return match === null ? 0 : Number.parseInt(match[0].replace(/,/g, ''), 10)
-          },
-          { timeout: 30_000, intervals: [500] },
-        )
-        .toBeGreaterThanOrEqual(450)
-    })
+  test.afterAll(async () => {
+    if (app !== undefined) await app.close()
+    cleanupProfile?.()
   })
-}
+
+  test('open → ready → a real analysis readout, with no engine override', async () => {
+    await importAndOpen(page)
+
+    // `ready` is proven, not declared: the 1-visit probe round-tripped through
+    // the production parser inside the packaged app — which required the
+    // bundled binary AND net to have shipped where `locate.ts` resolves them.
+    await expect(
+      page.getByTestId('engine-status').locator('.engine-status__value--ready'),
+    ).toBeVisible({ timeout: readyTimeout })
+
+    // A real read: the readout names a percentage and the engine's visit
+    // count for the settings-default 500-visit query. The real engine does
+    // not echo the cap the way the fake does — it overshoots to the next NN
+    // batch boundary (measured: 501) — so the assertion is a range, not an
+    // exact match.
+    await expect(page.getByTestId('analysis-winrate')).toContainText('%', {
+      timeout: readyTimeout,
+    })
+    // The element is `<i18n label> <count>`; the app boots in zh-CN, so the
+    // number is picked out of the string rather than parsed off the start.
+    // Partial ticks land here long before the search settles (the store takes
+    // both), so poll until the visits reach the settings-default cap rather
+    // than snapshotting the first tick (measured: ~30 visits ~0.5s in, cap
+    // reached ~3.4s in on the reference machine).
+    await expect
+      .poll(
+        async () => {
+          const text = (await page.getByTestId('analysis-visits').innerText()).trim()
+          const match = /\d[\d,]*/.exec(text)
+          return match === null ? 0 : Number.parseInt(match[0].replace(/,/g, ''), 10)
+        },
+        { timeout: readyTimeout, intervals: [500] },
+      )
+      .toBeGreaterThanOrEqual(450)
+  })
+})

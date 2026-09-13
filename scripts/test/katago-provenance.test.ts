@@ -35,20 +35,47 @@ describe('NOTICE names the bundled binary payloads (D4)', () => {
     expect(notice).toContain(KATAGO_MANIFEST.weights.license) // CC0-1.0
   })
 
-  it('targets only platforms with an official Eigen build', () => {
-    // Scope decision 6: no macOS binaries exist in any KataGo release, so the
-    // manifest must not carry a darwin target for the fetch tooling to trip on.
+  it('targets exactly the platforms the tooling supports', () => {
+    // M5: darwin joined as CI source builds (upstream publishes no macOS
+    // binaries, so those payloads come from GoMentor's own release — pinned in
+    // `sourceBuilds`). Every target the manifest declares must appear here; a
+    // new platform is a deliberate act that touches this assertion.
     expect(Object.keys(KATAGO_MANIFEST.engine.targets).sort()).toEqual([
+      'darwin-arm64',
+      'darwin-x64',
       'linux-x64',
       'win32-x64',
     ])
+    // The darwin payloads must never point at upstream: no official macOS
+    // release exists, so a URL resolved from upstream's downloadBase would 404
+    // (or worse, start resolving if upstream ever ships one — the source-built
+    // bytes would then differ from the pinned hash).
+    for (const target of ['darwin-arm64', 'darwin-x64'] as const) {
+      expect(KATAGO_MANIFEST.engine.sourceBuilds.builds[target]).toBeDefined()
+    }
+    expect(KATAGO_MANIFEST.engine.sourceBuilds.buildRef).toBe(
+      KATAGO_MANIFEST.engine.version,
+    )
   })
 })
 
 describe('manifest URLs resolve (live probe, skipped offline)', () => {
   const urls = [
-    ...Object.values(KATAGO_MANIFEST.engine.targets).map(
-      (asset) => `${KATAGO_MANIFEST.engine.downloadBase}/${asset.file}`,
+    ...(
+      Object.keys(
+        KATAGO_MANIFEST.engine.targets,
+      ) as readonly (keyof typeof KATAGO_MANIFEST.engine.targets)[]
+    ).map(
+      (target) =>
+        // darwin assets resolve against GoMentor's source-build release, not
+        // upstream's — same resolution the fetcher uses (engineDownloadBase),
+        // asserted here rather than imported so the test cannot share a bug
+        // with the code it tests.
+        `${
+          target.startsWith('darwin-')
+            ? KATAGO_MANIFEST.engine.sourceBuilds.downloadBase
+            : KATAGO_MANIFEST.engine.downloadBase
+        }/${KATAGO_MANIFEST.engine.targets[target].file}`,
     ),
     KATAGO_MANIFEST.weights.url,
     KATAGO_MANIFEST.fallbackWeights.url,

@@ -11,9 +11,11 @@
  * (fetched/verified via the GitHub API and katagotraining.org on 2026-09-04):
  *
  * - **Engine v1.18.1** — the latest release with Eigen CPU builds (v1.18.2 is
- *   CUDA-only). Eigen + eigenavx2 builds exist for **windows-x64 and linux-x64
- *   only**; no macOS binaries are published in any release, so there is no darwin
- *   target and macOS reports `unavailable` by construction (scope decision 6).
+ *   CUDA-only). Eigen + eigenavx2 builds exist for **windows-x64 and linux-x64**;
+ *   no macOS binaries are published in any release, so the darwin targets below
+ *   are **GoMentor CI source builds** (`sourceBuilds`,
+ *   `.github/workflows/katago-macos.yml`) published to this repository's own
+ *   release — added in M5.
  * - **Net `kata1-b6c96-s175395328-d26788732`** — final g170 b6c96,
  *   4,967,720 bytes, CC0. The original recommendation was b10c128 (site Elo
  *   11521.7); the Stage-2 benchmark gate (2026-09-06) measured it outside the
@@ -38,8 +40,14 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** A platform-architecture the fetch tooling knows how to target. */
-export type EngineTarget = 'win32-x64' | 'linux-x64'
+/**
+ * A platform-architecture the fetch tooling knows how to target. darwin
+ * targets are **source builds**: upstream publishes no macOS binaries, so
+ * GoMentor's own CI compiles them (`sourceBuilds` below,
+ * `.github/workflows/katago-macos.yml`) and publishes them as release
+ * assets of this repository.
+ */
+export type EngineTarget = 'win32-x64' | 'linux-x64' | 'darwin-arm64' | 'darwin-x64'
 
 export interface EngineAsset {
   /** Exact release asset filename under the release download URL. */
@@ -77,6 +85,24 @@ export interface KatagoManifest {
     /** Vendored components listed in KataGo's LICENSE preamble (cpp/external). */
     readonly vendored: string[]
     readonly targets: Record<EngineTarget, EngineAsset>
+    /**
+     * The darwin payloads are built from source, not downloaded from upstream.
+     * The build recipe and runner matrix live in the workflow; what the
+     * manifest pins here is the source ref, the release of THIS repository
+     * that carries the artifacts, and which backend each target was built
+     * with — the facts a reviewer needs to connect a released binary to the
+     * source that produced it.
+     */
+    readonly sourceBuilds: {
+      readonly workflow: string
+      readonly buildRef: string
+      /** The GoMentor release tag carrying the darwin artifacts. */
+      readonly releaseTag: string
+      readonly downloadBase: string
+      readonly builds: Readonly<
+        Record<'darwin-arm64' | 'darwin-x64', { readonly backend: 'METAL' | 'OPENCL' }>
+      >
+    }
   }
   readonly weights: WeightAsset
   /** Recorded fallback if the benchmark gate rejects the primary net. */
@@ -132,6 +158,55 @@ export const KATAGO_MANIFEST: KatagoManifest = {
         archive: 'katago-v1.18.1-eigenavx2-linux-x64.zip',
         binary: 'katago',
       },
+
+      // Source builds (no official macOS release exists — see sourceBuilds).
+      // bytes/sha256 below are MEASURED from the published release asset —
+      // the workflow uploads a .sha256 receipt alongside the zip, and both
+      // values here come from that receipt (2026-09-13). Unlike the upstream
+      // assets the hash starts pinned, not null: the producing build is ours,
+      // so there is no TOFU "first observation" to wait for. The zip carries
+      // the single ad-hoc-codesigned `katago` Mach-O; the fetcher flattens
+      // and chmods it. Asset names carry no `v` (the workflow derives
+      // `katago-<version>` from `v1.18.1` by stripping the v — consistent
+      // between the release tag and the files under it).
+      'darwin-arm64': {
+        file: 'katago-darwin-arm64-1.18.1.zip',
+        bytes: 3_470_024,
+        sha256: '6d453aea498f5773d9076b60577ba23d48c4560189f82f3ebf9eb23a3a09d73d',
+        appImage: false,
+        archive: 'katago-darwin-arm64-1.18.1.zip',
+        binary: 'katago',
+      },
+      'darwin-x64': {
+        file: 'katago-darwin-x64-1.18.1.zip',
+        bytes: 3_196_724,
+        sha256: 'ff4139c1659493dd1e114f592039f133bc0cdad05fab116dace0d4722f179a72',
+        appImage: false,
+        archive: 'katago-darwin-x64-1.18.1.zip',
+        binary: 'katago',
+      },
+    },
+
+    sourceBuilds: {
+      workflow: '.github/workflows/katago-macos.yml',
+      buildRef: 'v1.18.1',
+      // Assets publish to a release of THIS repo under a tag derived from the
+      // engine version with the `v` stripped (`katago-1.18.1`). One tag per
+      // engine build: re-publishing different bytes under the same tag would
+      // break the pinned-hash chain for anyone who already fetched — bump the
+      // version instead.
+      releaseTag: 'katago-1.18.1',
+      downloadBase:
+        'https://github.com/WASABI110/GoMentor/releases/download/katago-1.18.1',
+      // Runner reality, verified 2026-09-13: macos-13 (the historical Intel
+      // label) was retired 2025-12-04, and `macos-15-intel` — the only x86_64
+      // image left — is guaranteed only until 2027-08. After that the x64
+      // source build dies with it; the backend choice (Intel Macs: OpenCL,
+      // not Metal) follows KataGo issue #1175 (Metal regression on Intel).
+      builds: {
+        'darwin-arm64': { backend: 'METAL' },
+        'darwin-x64': { backend: 'OPENCL' },
+      },
     },
   },
 
@@ -169,7 +244,21 @@ export const KATAGO_MANIFEST: KatagoManifest = {
 export function currentEngineTarget(): EngineTarget | null {
   if (process.platform === 'win32' && process.arch === 'x64') return 'win32-x64'
   if (process.platform === 'linux' && process.arch === 'x64') return 'linux-x64'
-  return null // darwin (any arch), or non-x64 — no official Eigen build (scope 6)
+  if (process.platform === 'darwin' && process.arch === 'arm64') return 'darwin-arm64'
+  if (process.platform === 'darwin' && process.arch === 'x64') return 'darwin-x64'
+  return null // non-x64 win/linux, or unknown combos — no target exists
+}
+
+/**
+ * The base URL an engine asset downloads from. Win/linux come from upstream's
+ * release; darwin comes from this repository's own source-build release
+ * (`sourceBuilds`). Kept here so fetch-katago.ts carries no URL policy and
+ * the provenance test can probe every URL the manifest can produce.
+ */
+export function engineDownloadBase(target: EngineTarget): string {
+  return target.startsWith('darwin-')
+    ? KATAGO_MANIFEST.engine.sourceBuilds.downloadBase
+    : KATAGO_MANIFEST.engine.downloadBase
 }
 
 /**

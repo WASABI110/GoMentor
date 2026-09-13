@@ -267,15 +267,16 @@ describe('per-platform engine packaging (M2)', () => {
     expect(topBlock).not.toContain('from: resources/katago\n')
   })
 
-  it('ships the engine only for platforms with an official build', () => {
+  it('ships the engine for exactly the platforms with a target', () => {
     const yml = readBuilderYml()
     expect(yml).toContain('from: resources/katago/win32-x64')
     expect(yml).toContain('from: resources/katago/linux-x64')
-    // No macOS engine: KataGo publishes no macOS binaries (scope decision 6), so
-    // there must be no darwin engine entry to copy a nonexistent directory.
+    // M5: the darwin engine is the CI source build (manifest sourceBuilds).
+    // Only darwin-arm64 ships — the mac packaging target is arm64-only, so an
+    // x64 entry would copy a directory into an installer that is never built.
     const macBlock = (yml.split('\nmac:')[1] ?? '').split('\nlinux:')[0] ?? ''
-    expect(macBlock).not.toContain('resources/katago')
-    expect(yml).not.toContain('darwin')
+    expect(macBlock).toContain('from: resources/katago/darwin-arm64')
+    expect(yml).not.toContain('resources/katago/darwin-x64')
   })
 
   it('copies each platform payload into the subdirectory locate.ts resolves', () => {
@@ -293,8 +294,10 @@ describe('per-platform engine packaging (M2)', () => {
       /from:\s*resources\/katago\/(\S+)\s*\n\s*to:\s*(\S+)/.exec(block)?.[2] ?? null
     const winBlock = (yml.split('\nwin:')[1] ?? '').split('\nnsis:')[0] ?? ''
     const linuxBlock = (yml.split('\nlinux:')[1] ?? '').split('\npublish:')[0] ?? ''
+    const macBlock = (yml.split('\nmac:')[1] ?? '').split('\nlinux:')[0] ?? ''
     expect(destinationFor(winBlock)).toBe('katago/win32-x64')
     expect(destinationFor(linuxBlock)).toBe('katago/linux-x64')
+    expect(destinationFor(macBlock)).toBe('katago/darwin-arm64')
   })
 
   it('keeps the local fetch cache (verified archive, partials) out of the installer', () => {
@@ -306,7 +309,8 @@ describe('per-platform engine packaging (M2)', () => {
     const yml = readBuilderYml()
     const winBlock = (yml.split('\nwin:')[1] ?? '').split('\nnsis:')[0] ?? ''
     const linuxBlock = (yml.split('\nlinux:')[1] ?? '').split('\npublish:')[0] ?? ''
-    for (const block of [winBlock, linuxBlock]) {
+    const macBlock = (yml.split('\nmac:')[1] ?? '').split('\nlinux:')[0] ?? ''
+    for (const block of [winBlock, linuxBlock, macBlock]) {
       expect(block).toContain('from: resources/katago/')
       expect(block).toContain('!*.zip')
       expect(block).toContain('!*.partial')

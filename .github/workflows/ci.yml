@@ -94,7 +94,9 @@ jobs:
       # payload keyed by the manifest's git blob hash — content-addressed, so
       # bumping the manifest (new version/net) invalidates the cache, while an
       # unrelated commit reuses it. Without the cache each of the three matrix
-      # runs would re-download ~50MB (engine zip + net).
+      # runs would re-download ~50MB (engine zip + net). Since M5 the darwin
+      # payload is the CI source build published to this repo's katago-v1.18.1
+      # release — fetched through the same chain, cached the same way.
       - name: Restore KataGo engine + weights
         id: katago-cache
         uses: actions/cache@v4
@@ -102,10 +104,9 @@ jobs:
           path: apps/desktop/resources
           key: katago-${{ runner.os }}-${{ hashFiles('scripts/katago-manifest.ts') }}
 
-      # macOS has no official KataGo build (scope decision 6), so the fetch is a
-      # no-op there and the app reports `unavailable` by construction. The fetch
-      # fails loudly on win/linux if the source is unreachable — a zero exit must
-      # mean "present and verified", never "silently skipped".
+      # The fetch fails loudly if the source is unreachable — a zero exit must
+      # mean "present and verified", never "silently skipped". Platforms with
+      # no engine target (none in the current matrix) exit 0 by design.
       - name: Fetch KataGo engine + weights
         run: |
           pnpm fetch:katago
@@ -156,9 +157,11 @@ jobs:
         if: runner.os == 'Windows'
         run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch
 
-      # macOS runs the same spec's darwin branch: launch the packaged .app,
-      # open a record, assert the badge reports `unavailable` (no darwin
-      # engine asset exists — scope decision 6) and the record still renders.
+      # macOS runs the same spec against the real CI-built darwin engine
+      # (source-build asset, M5): the packaged .app must reach `ready` and land
+      # a real readout, proving the darwin `extraResources` layout the same way
+      # the win/linux runs prove theirs. First-run Metal shader compilation is
+      # why this gate allows the darwin branch its 90s ready timeout.
       - name: Packaged launch gate
         if: runner.os == 'macOS'
         run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch

@@ -48,13 +48,13 @@ files:
 #
 # Platform split (M2): knowledge and weights are platform-independent, so they
 # stay in this top-level block and ride into every installer. The KataGo engine
-# binary is per-platform, so it moved into `win.extraResources` / `linux.extraResources`
-# below — each installer ships only its own OS/arch binary (the tier is sized for
-# one). There is deliberately no engine entry under `mac`: KataGo publishes no
-# macOS binaries (research katago-releases.md), so the macOS app reports
-# `unavailable` by construction (scope decision 6). The M1 top-level
-# `resources/katago` copy-everything entry is gone; copying all platforms into
-# every installer would triple the tier silently.
+# binary is per-platform, so it moved into the per-platform blocks below — each
+# installer ships only its own OS/arch binary (the tier is sized for one).
+# M5 added the darwin entry: the engine there is the CI source build
+# (`.github/workflows/katago-macos.yml`, manifest `sourceBuilds`), published as
+# a release asset of this repository and fetched by the same TOFU chain. The
+# M1 top-level `resources/katago` copy-everything entry is gone; copying all
+# platforms into every installer would triple the tier silently.
 extraResources:
   - from: resources/knowledge
     to: knowledge
@@ -114,10 +114,23 @@ mac:
     - target: dmg
       arch: [arm64]
   # Bundled third-party binaries (KataGo) need hardened-runtime exceptions or
-  # their own signature. Deferred to M5 with the signing spike.
+  # their own signature. The engine binary itself arrives ad-hoc signed by the
+  # build workflow (Apple Silicon refuses unsigned child processes); the app
+  # bundle itself is unsigned — no Apple developer account (M5 scope
+  # decision), so macOS shows the Open Anyway flow, documented in the install
+  # docs. Auto-update stays disabled on macOS for the same reason.
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # The CI-built darwin engine, same contract as the win/linux blocks: `to`
+  # keeps the per-platform subdir `paths.ts` resolves, and fetch intermediates
+  # (the *.zip cache, *.partial resume state) must not ship. Only arm64 ships:
+  # the mac packaging target is arm64-only (see above), so an x64 entry would
+  # copy a directory into an installer that is never built.
+  extraResources:
+    - from: resources/katago/darwin-arm64
+      to: katago/darwin-arm64
+      filter: ['**/*', '!*.zip', '!**/*.zip', '!*.partial', '!**/*.partial', '!.*']
 
 linux:
   target:

@@ -254,15 +254,15 @@ describe('extractZip', () => {
 })
 
 describe('currentEngineTarget', () => {
-  it('returns null on platforms with no official Eigen build (macOS)', () => {
+  it('maps the host platform to a manifest target, or null when none exists', () => {
     // This test runs on the dev/CI host; we assert the contract shape, not the
-    // host. On win/linux it is a target key; the manifest carries no darwin key.
+    // host. darwin joined the target list in M5 (CI source builds), so the
+    // only honest host-independent assertion is: whatever the host resolves
+    // to is a key the manifest actually carries.
     const target = currentEngineTarget()
     if (target !== null) {
       expect(Object.keys(KATAGO_MANIFEST.engine.targets)).toContain(target)
     }
-    expect(Object.keys(KATAGO_MANIFEST.engine.targets)).not.toContain('darwin-arm64')
-    expect(Object.keys(KATAGO_MANIFEST.engine.targets)).not.toContain('darwin-x64')
   })
 })
 
