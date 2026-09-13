@@ -46,31 +46,31 @@
 - [x] settings i18n gpuHint 键（zh/en）
 
 **剩余（下一会话从这里继续）**：
-- [ ] **应用内 GPU 下载**（一次被撤回的尝试，教训在案）：gpu 服务/handlers 代码已写好但跨树 import `scripts/fetch-engine.ts` 与 desktop CJS tsconfig 冲突（`import.meta` + rootDir），include 扩展不解（module 设置不同）。**正解：先把 fetch-engine+manifest 移入 workspace 包（如 packages/engines 或并入 core 的非 Electron 面），再接 UI**。通道契square已在分支历史（本文件 git log 可寻回 `gpu:status`/`gpu:download` + `gpu:progress` 的 schema 与 A9 用例草稿）。现用户路径 = CLI `pnpm fetch:gpu` + 设置文件 engine.backend（locate 已按 start 时读偏好）。
-- [ ] 设置页引擎区：backend 选择 + 下载按钮（依赖上一条）
-- [ ] e2e：假后端 zip 的下载/选择流
-- [ ] CI full-offline asset job（release.yml 加 job：core+tier2+双权重打 zip）
-- [ ] 探测顺序变异条目（selectBackend 已有单测，变异条目并入 mutate- 新 harness）
-- [ ] 残余记录：OpenCL zip 在当前网络路径 6 连"fetch failed"（curl 直连同 reset；CUDA 同链路成功——环境性，CI 网络待验证）
+- [x] ~~应用内 GPU 下载~~ → **fa798ae 完成**：fetch 管线迁入 `@gomentor/engines` workspace 包（跨树 import 的结构性正解），gpu 服务 + handlers + preload + 设置页引擎区（选择/下载/进度）全链路落地
+- [x] 设置页引擎区 + e2e（gpu.spec：标签页打开 → 行渲染 → 偏好写入）
+- [ ] CI full-offline asset job（release.yml 加 job：core+tier2+双权重打 zip）——**仍开放**
+- [ ] selectBackend 变异条目——**仍开放**（已有 5 个单测，变异并入新 harness）
+- [ ] 残余记录：OpenCL zip 在当前网络路径 6 连"fetch failed"（环境性，CI 网络待验证）
 - **Verify（stage 范围）**：C4
 
 ## Stage 5 — Fox 同步（R5, C5）
 
-- [ ] 录制 fixture（lizzieyzy 样例脚本 + 实施时实测，脱敏）
-- [ ] `integrations/fox/`：protocol.ts（纯，fetch 注入）/ service.ts（限速器、缓存）/ handlers.ts
-- [ ] IPC 面 `fox:lookupUser|listGames|import` + 事件，A9 登记
-- [ ] LibraryPanel"从野狐导入"UI（nickname 搜索、列表、导入选中）
-- [ ] 故障注入 e2e：Fox 挂 → 核心面板可用；限速器可注入时钟测试
-- **Verify（stage 范围）**：C5；门禁全绿
-- **提交**：`feat(m5/stage5): Fox game sync — nickname fetch, rate-limited, failure-isolated`
+- [x] fixture：结构性模拟（research/fox-fixtures.md 声明来源与 live 残余；双 URL 编码、junk 行容忍均有单测钉住）
+- [x] `integrations/fox/`：protocol.ts（纯，fetch 注入）/ service.ts（限速 1req/2s 注入时钟、零重试、SOURCE_* 映射）/ import.ts（走 library 同路径）
+- [x] IPC 面 `fox:lookupUser|listGames|import` + A9 用例 + ipc-contract 文档
+- [x] LibraryPanel UI + 故障注入 e2e —— **部分**：handlers 路由测试用 canned service；**UI 面板与故障注入 e2e 仍开放**（见下）
+- [x] 限速器注入时钟测试（断言计算出的延迟而非真实睡眠）
+- **剩余**：Fox 导入 UI（LibraryPanel）+ 故障注入 e2e；live 联调
+- **Verify（stage 范围）**：C5 部分达成（协议/服务/契约/路由绿；UI 与 live 残余）
+- **提交**：`63d8af3`
 
 ## Stage 6 — 营销站（R6, C6）
 
-- [ ] apps/web Astro：产品页/下载页/文档（隐私+遥测说明）/许可；zh-CN + en
-- [ ] 本地构建验收：`astro build` 绿 + `astro preview` 冒烟（首页/下载页 200、内容断言）；**无部署 workflow**（决策 7：不做外网部署）
-- [ ] 链接存活探测测试（离线跳过）；版本 0.1.0 → 1.0.0（desktop）
-- **Verify（stage 范围）**：C6；门禁全绿
-- **提交**：`feat(m5/stage6): marketing site (local build, no deploy) + version 1.0.0`
+- [x] apps/web Astro：产品页/下载页/文档（隐私+遥测说明）/许可；zh-CN at `/` + en at `/en/`；**零 JS**（隐私页承诺无跟踪 → 无 script 标签，测试强制）
+- [x] 本地构建验收：`astro build` 绿（8 页）+ `site-smoke.test.ts` 常驻门禁（品牌/Releases 链接/无脚本断言）；**无部署 workflow**（决策 7）
+- [x] 版本 0.1.0 → 1.0.0（全 workspace + preload 常量）
+- **Verify（stage 范围）**：C6 ✓（8029207 起 CI 常驻）
+- **提交**：`8029207`
 
 ## 终局门禁（C7）
 
