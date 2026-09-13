@@ -62,12 +62,12 @@ jobs:
             runner: macos-15
             backend: METAL
             buildSystem: ninja
-            brewDeps: cmake ninja libzip protobuf abseil ccache
+            brewDeps: ninja libzip protobuf abseil ccache
           - target: darwin-x64
             runner: macos-15-intel
             backend: OPENCL
             buildSystem: make
-            brewDeps: cmake libzip ccache
+            brewDeps: libzip ccache
 
     steps:
       - uses: actions/checkout@v4
@@ -93,18 +93,30 @@ jobs:
         with:
           path: |
             ~/Library/Caches/ccache
-            katago-build/katago
-          key: katago-macos-${{ matrix.target }}-${{ env.KATAGO_REF }}-v2
+            katago-src/cpp/katago
+          key: katago-macos-${{ matrix.target }}-${{ env.KATAGO_REF }}-v3
 
-      # Diagnostics are load-bearing here: a failed configure's real error only
-      # exists in the job log, which the unauthenticated API cannot read — so on
-      # failure the step re-emits the error lines as workflow annotations,
+      # No `brew install cmake`: the runner image's preinstalled cmake (3.x)
+      # is what the Metal build needs — homebrew's cmake 4.x cannot determine
+      # the Swift compiler from Xcode's toolchain (measured: `CMAKE_Swift_
+      # COMPILER not set, after EnableLanguage` on cmake 4.4.3 with swiftc
+      # present; KaTrain's CI uses the preinstalled cmake for the same build
+      # and works). The version below is printed by the diagnostics on failure.
+      #
+      # Diagnostics are load-bearing: a failed configure's real error only
+      # exists in the job log, which the unauthenticated API cannot read — so
+      # on failure the step re-emits error lines as workflow annotations,
       # which the check-runs API DOES expose.
+      #
+      # In-source configure (cmake . not cmake -B), exactly as upstream's
+      # Compiling.md and KaTrain's CI both do for this project.
       - name: Configure (cmake)
         working-directory: katago-src/cpp
         run: |
           set -o pipefail
-          cmake -B ../../katago-build -DCMAKE_BUILD_TYPE=Release \
+          GEN=""
+          if [ "${{ matrix.buildSystem }}" = "ninja" ]; then GEN="-G Ninja"; fi
+          cmake $GEN . -DCMAKE_BUILD_TYPE=Release \
             -DUSE_BACKEND=${{ matrix.backend }} -DNO_GIT_REVISION=1 \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache 2>&1 | tee configure.log || {
             echo "::error::cmake configure failed — swiftc: $(xcrun -f swiftc 2>&1), cmake: $(cmake --version | head -1)"
@@ -115,7 +127,7 @@ jobs:
           }
 
       - name: Build
-        working-directory: katago-build
+        working-directory: katago-src/cpp
         run: |
           if [ "${{ matrix.buildSystem }}" = "ninja" ]; then
             ninja
@@ -127,7 +139,7 @@ jobs:
       # start (Metal shader issue, missing runtime) must fail here, not at
       # first launch on a user's machine.
       - name: Probe (katago version)
-        working-directory: katago-build
+        working-directory: katago-src/cpp
         run: ./katago version
 
       # Ad-hoc deep-sign: Apple Silicon refuses to spawn UNSIGNED child
@@ -137,14 +149,14 @@ jobs:
       # not notarization and macOS will still show the Open Anyway flow for
       # the downloaded app. Documented in the install docs (Stage 6).
       - name: Ad-hoc deep-sign and verify
-        working-directory: katago-build
+        working-directory: katago-src/cpp
         run: |
           codesign --deep --force --sign - katago
           codesign --verify --deep --strict katago
           codesign -dv katago 2>&1 | head -3
 
       - name: Package (zip + sha256)
-        working-directory: katago-build
+        working-directory: katago-src/cpp
         # zip (not tar.gz): fetch-engine.ts's extractor is the zip reader, and
         # zip preserves the exec bit the extracted binary needs. The sha256
         # sidecar file lets the manifest pin the measured hash (the manifest
@@ -163,8 +175,8 @@ jobs:
         with:
           name: ${{ matrix.target }}-engine
           path: |
-            katago-build/katago-darwin-*.zip
-            katago-build/katago-darwin-*.zip.sha256
+            katago-src/cpp/katago-darwin-*.zip
+            katago-src/cpp/katago-darwin-*.zip.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -185,4 +197,4 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "KataGo $KATAGO_REF macOS builds" \
               --notes "CI-built KataGo $KATAGO_REF for the GoMentor macOS engine tier (arm64: METAL, x64: OpenCL). Ad-hoc signed. Consumed by \`pnpm fetch:katago\`; checksums are pinned in scripts/katago-manifest.ts + katago-checksums.json."
-          gh release upload "$TAG" katago-build/katago-darwin-*.zip katago-build/katago-darwin-*.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" katago-src/cpp/katago-darwin-*.zip katago-src/cpp/katago-darwin-*.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
