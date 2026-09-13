@@ -116,3 +116,36 @@ Delivered M4 end to end across four stages, each committed, pushed, and CI-green
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: M5 complete: release milestone — macOS engine tier, local telemetry, auto-update, GPU tier-2, Fox sync, marketing site, v1.0.0
+
+**Date**: 2026-09-13
+**Task**: M5 complete: release milestone — macOS engine tier, local telemetry, auto-update, GPU tier-2, Fox sync, marketing site, v1.0.0
+**Branch**: `master`
+
+### Summary
+
+Shipped the six-stage release milestone: macOS KataGo CI source builds (arm64 METAL/x64 OpenCL, ad-hoc signed, publish-once release semantics) with the packaged-launch gate running the real engine; local-only consent-gated telemetry (uploadToServer:false pinned by mutation 7/7, zero-network trap tests, Reveal crashes menu); electron-updater auto-update (github feed, eligibility pure fn, update:status channel, release.yml tag->publish chain, no-token rehearsal path); GPU tier-2 (@gomentor/engines package extracted from scripts, pnpm fetch:gpu proven live on CUDA, backend-aware locate, in-app download service + settings UI, A9 channels); Fox public-kifu sync (isolated protocol/service layers, injected fetch+clock, double-encode quirk pinned, fox channels + docs); Astro marketing site zh/en zero-JS 8 pages with a standing smoke gate, no deploy per scope decision; version 1.0.0 across the workspace. Final gate C1-C6 PASS with residuals recorded in final-gate.md (auto-update real-feed first run needs GH_TOKEN; Fox live verification pending; full-offline CI job + selectBackend mutations open). Locales ja/ko/th/vi cancelled by user decision. Key measured lessons recorded to spec: cmake4-vs-Xcode-Swift, publish-once for non-reproducible source builds, annotation-only CI diagnosis, expect.poll over sleeps, recursive JSON merges only.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fd9b77c` | (see git log) |
+| `f8f1702` | (see git log) |
+| `a3ef962` | (see git log) |
+| `02754fe` | (see git log) |
+| `55770f6` | (see git log) |
+| `17521a8` | (see git log) |
+| `1129758` | (see git log) |
+| `c4ebc5a` | (see git log) |
+| `fa798ae` | (see git log) |
+| `63d8af3` | (see git log) |
+| `8029207` | (see git log) |
+| `16fc5e4` | (see git log) |
+| `82e5b70` | (see git log) |
+
+### Status
+
+[OK] **Completed**
