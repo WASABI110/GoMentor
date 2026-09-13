@@ -3,6 +3,7 @@ import { useLibraryStore } from '../state/libraryStore'
 import { useGameStore } from '../state/gameStore'
 import { GameList } from '../components/GameList'
 import { ProfileSection } from '../components/ProfileSection'
+import { FoxImportSection } from '../components/FoxImportSection'
 
 /**
  * The library panel.
@@ -72,6 +73,7 @@ export function LibraryPanel(): React.JSX.Element {
         }}
         onDropFiles={handleDropFiles}
       />
+      <FoxImportSection />
       <ProfileSection />
     </aside>
   )

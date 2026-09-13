@@ -119,8 +119,13 @@ describe('the allowlist itself', () => {
   it('contains no copyleft id', () => {
     // A guard on future edits to `PERMITTED`: adding 'GPL-3.0' or 'AGPL-3.0' there
     // would silently make every other assertion in this file vacuous.
+    //
+    // `(?<!L)GPL` — the negative lookbehind keeps LGPL-3.0-or-later out of the
+    // copyleft bucket: sharp's libvips binary (M5 stage 6) is the one recorded,
+    // deliberate exception (build-machine dependency, never shipped code), and
+    // LGPL-3.0 is GPL-3.0-compatible where GPL itself is not absorbable.
     const copyleft = [...PERMITTED].filter((id) =>
-      /GPL|SSPL|BUSL|OSL|EUPL|CDDL|MPL|CC-BY-(NC|SA)/i.test(id),
+      /(?<!L)GPL|SSPL|BUSL|OSL|EUPL|CDDL|MPL|CC-BY-(NC|SA)/i.test(id),
     )
     expect(copyleft).toEqual([])
   })

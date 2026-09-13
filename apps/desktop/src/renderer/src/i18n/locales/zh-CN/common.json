@@ -34,7 +34,19 @@
     },
     "unknownPlayer": "未知",
     "unknownDate": "日期不明",
-    "unknownResult": "结果不明"
+    "unknownResult": "结果不明",
+    "fox": {
+      "title": "从野狐导入棋谱",
+      "nicknamePlaceholder": "野狐昵称",
+      "search": "搜索",
+      "searching": "搜索中…",
+      "import": "导入",
+      "imported": "已导入",
+      "duplicate": "棋库中已有",
+      "retry": "重试",
+      "noGames": "该昵称下没有公开棋谱。",
+      "isolationHint": "公开棋谱来自野狐服务器;搜索与导入失败不影响棋库的其他功能。"
+    }
   },
   "menu": {
     "file": "文件",

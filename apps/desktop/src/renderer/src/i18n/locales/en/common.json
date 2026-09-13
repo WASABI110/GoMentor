@@ -34,7 +34,19 @@
     },
     "unknownPlayer": "Unknown",
     "unknownDate": "Date unknown",
-    "unknownResult": "Result unknown"
+    "unknownResult": "Result unknown",
+    "fox": {
+      "title": "Import from Fox",
+      "nicknamePlaceholder": "Fox nickname",
+      "search": "Search",
+      "searching": "Searching…",
+      "import": "Import",
+      "imported": "Imported",
+      "duplicate": "Already in library",
+      "retry": "Retry",
+      "noGames": "No public games for this nickname.",
+      "isolationHint": "Public games come from the Fox server; search and import failures never affect the rest of the library."
+    }
   },
   "menu": {
     "file": "File",
