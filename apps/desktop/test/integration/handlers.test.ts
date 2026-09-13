@@ -17,6 +17,7 @@ import {
 import type { SettingsFs } from '../../src/main/settings'
 import type { SqliteDatabase } from '../../src/main/db/connection'
 import type { GpuService } from '../../src/main/katago/gpu'
+import type { FoxService } from '../../src/main/integrations/fox/service'
 
 /**
  * IPC handler integration: every channel registered, every response valid
@@ -280,6 +281,7 @@ beforeEach(() => {
     engine,
     batch,
     gpu: fakeGpu(),
+    fox: fakeFox(),
     analysis: createAnalysisRepository(db),
     now: () => NOW,
     relabelMenu: (locale) => relabelCalls.push(locale),
@@ -351,6 +353,7 @@ describe('registration covers the contract', () => {
         engine,
         batch,
         gpu: fakeGpu(),
+        fox: fakeFox(),
         analysis: createAnalysisRepository(db),
         now: () => NOW,
         relabelMenu: (locale) => relabelCalls.push(locale),
@@ -423,6 +426,7 @@ describe('the boundary rejects bad requests', () => {
       engine,
       batch,
       gpu: fakeGpu(),
+      fox: fakeFox(),
       analysis: createAnalysisRepository(db),
       now: () => NOW,
       relabelMenu: (locale) => relabelCalls.push(locale),
@@ -916,6 +920,9 @@ describe('every channel is exercised', () => {
       'profile:get',
       'gpu:status',
       'gpu:download',
+      'fox:lookupUser',
+      'fox:listGames',
+      'fox:import',
     ]
     expect([...exercised].sort()).toEqual([...CHANNEL_NAMES].sort())
   })
@@ -973,3 +980,25 @@ describe('gpu channels (M5 stage 4)', () => {
     expect(sentEvents.filter((e) => e.channel === 'gpu:progress').length).toBe(before)
   })
 })
+
+/**
+ * The Fox service double: canned user/games/sgf shaped like the fixtures —
+ * these tests assert handler wiring (fox channels route to the service), not
+ * the protocol or the rate limiter (fox-protocol/fox-service suites).
+ */
+function fakeFox(): FoxService {
+  return {
+    lookupUser: () => Promise.resolve({ uid: '42', nickname: 'n' }),
+    listGames: () =>
+      Promise.resolve([
+        {
+          chessid: '20260901-001',
+          black: 'a',
+          white: 'b',
+          date: '2026-09-01',
+          result: 'B+2.5',
+        },
+      ]),
+    fetchGameSgf: () => Promise.resolve('(;GM[1]FF[4]SZ[19])'),
+  }
+}

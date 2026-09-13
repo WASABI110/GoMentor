@@ -8,10 +8,12 @@ import { registerEngineHandlers } from './engine.handlers'
 import { registerBatchHandlers } from './batch.handlers'
 import { registerProfileHandlers } from './profile.handlers'
 import { registerGpuHandlers } from './gpu.handlers'
+import { registerFoxHandlers } from './fox.handlers'
 import type { Locale } from '@gomentor/shared'
 import type { EngineService } from '../katago/service'
 import type { BatchService } from '../katago/batch'
 import type { GpuService } from '../katago/gpu'
+import type { FoxService } from '../integrations/fox/service'
 import type { AnalysisRepository } from '../db/repositories/analysis'
 import type { GameStore } from '../library/store'
 import type { LlmService } from '../llm/service'
@@ -39,6 +41,8 @@ export interface Dependencies {
   batch: BatchService
   /** GPU tier-2 downloads (M5 Stage 4): status + one-at-a-time fetch. */
   gpu: GpuService
+  /** Fox public-kifu sync (M5 Stage 5): rate-limited, failure-isolated. */
+  fox: FoxService
   /** The analysis ledger and rows (M4): the profile derivation reads it on demand. */
   analysis: AnalysisRepository
   /**
@@ -70,6 +74,7 @@ export function registerAllHandlers(deps: Dependencies): void {
   registerEngineHandlers(deps.engine)
   registerBatchHandlers(deps.batch)
   registerGpuHandlers(deps.gpu, deps.settings)
+  registerFoxHandlers(deps.fox, deps.store, deps.now)
   registerProfileHandlers({
     store: deps.store,
     repository: deps.analysis,

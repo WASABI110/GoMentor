@@ -238,6 +238,18 @@ Starts one tier-2 download — `{ backend: 'cuda' | 'opencl' }` → `{ started: 
 
 Tier-2 download progress: `{ backend, state, received?, total?, error? }`. States in order: `downloading` (byte counts, throttled to one emission per 512 KB — a fast link must not flood the renderer), `extracting`, then `done` or `error` (a short message; the detail is in the local log, and the `.partial` stays so the next attempt resumes rather than restarts).
 
+### `fox:lookupUser`
+
+Resolves a Fox (野狐) nickname to `{ uid, nickname }` — the uid the other Fox channels require. The only channel that needs no cursor or chess id. Failures are the integration codes: `SOURCE_UNREACHABLE` (endpoint down, network), `SOURCE_SCHEMA_CHANGED` (payload shape drifted from the fixtures), `FOX_USER_NOT_FOUND` (a state — the name has no public account).
+
+### `fox:listGames`
+
+One page of a user's public games — `{ uid, lastCode? }` → `{ games: [{ chessid, black, white, date, result }] }`. `lastCode` is the previous page's last chess id; omit it for the first page. An empty `games` array means the walk is complete, not an error. Same failure codes as `fox:lookupUser`.
+
+### `fox:import`
+
+Fetches one game's SGF by `chessid` and imports it through the ordinary library path — content-hash dedup, `library:changed` event — returning `{ gameId, duplicate }`. A duplicate is a successful no-op (`duplicate: true`, the `gameId` of the existing record), matching `library:import`'s semantics. The upstream fetch failure codes are as above; a payload that does not parse as SGF is `SGF_NOT_SGF`.
+
 ## Adding a channel
 
 1. Add it to `CHANNELS` or `EVENTS` in [`ipc.ts`](../packages/shared/src/ipc.ts) with both schemas.

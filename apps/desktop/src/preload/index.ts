@@ -187,6 +187,15 @@ const api = Object.freeze({
       invoke('gpu:download', request),
   }),
 
+  fox: Object.freeze({
+    lookupUser: (request: ChannelRequest<'fox:lookupUser'>) =>
+      invoke('fox:lookupUser', request),
+    listGames: (request: ChannelRequest<'fox:listGames'>) =>
+      invoke('fox:listGames', request),
+    importGame: (request: ChannelRequest<'fox:import'>) =>
+      invoke('fox:import', request),
+  }),
+
   profile: Object.freeze({
     get: (request: ChannelRequest<'profile:get'>) => invoke('profile:get', request),
   }),

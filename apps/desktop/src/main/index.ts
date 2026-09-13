@@ -20,6 +20,7 @@ import { applyMenu } from './menu'
 import { createUpdateService } from './update/update'
 import { locateBundledEngine } from './katago/locate'
 import { createNodeGpuService } from './katago/gpu'
+import { createFoxService } from './integrations/fox/service'
 
 /**
  * `settings.engine.backend` → the locate-level preference: a GPU backend name
@@ -94,6 +95,14 @@ function createServices() {
       emit('gpu:progress', progress)
     },
   })
+  // Fox public-kifu sync (M5 Stage 5): the rate limiter is process-global by
+  // design — the upstream does not distinguish callers, so every Fox channel
+  // in this process shares one spacing clock.
+  const fox = createFoxService({
+    fetch: (url) => fetch(url),
+    now: () => Date.now(),
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  })
   const llm = createLlmService(settings, secrets, {
     store,
     engine,
@@ -107,7 +116,19 @@ function createServices() {
     crashReporter,
     now: () => new Date().toISOString(),
   })
-  return { settings, secrets, db, store, analysis, llm, engine, batch, gpu, telemetry }
+  return {
+    settings,
+    secrets,
+    db,
+    store,
+    analysis,
+    llm,
+    engine,
+    batch,
+    gpu,
+    fox,
+    telemetry,
+  }
 }
 
 // Two instances would fight over settings, the log file, and — from M2 —
@@ -209,6 +230,7 @@ if (!gotLock) {
     // Before the window: the renderer calls settings:get on mount.
     registerAllHandlers({
       gpu: created.gpu,
+      fox: created.fox,
       store: created.store,
       settings: created.settings,
       secrets: created.secrets,

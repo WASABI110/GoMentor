@@ -28,7 +28,9 @@ function GpuBackends(): React.JSX.Element {
         if (result.ok) setStatus(result.data)
         else setError(result.error.code)
       })
-      .catch(() => { setError('IPC_HANDLER_FAILED'); })
+      .catch(() => {
+        setError('IPC_HANDLER_FAILED')
+      })
   }, [])
   useIpcEvent(window.gomentor.onGpuProgress, setProgress)
 

@@ -359,6 +359,38 @@ const CASES: Record<ChannelName, ChannelCase> = {
       { status: 'idle', total: 0, done: 1, failed: 0 },
     ],
   },
+  'fox:lookupUser': {
+    validRequest: { nickname: '测试棋手' },
+    invalidRequests: [{}, { nickname: '' }, 'x'],
+    validResponse: { uid: '12345678', nickname: '测试棋手' },
+    invalidResponses: [{}, { uid: '1' }],
+  },
+  'fox:listGames': {
+    validRequest: { uid: '12345678' },
+    invalidRequests: [{}, { uid: '' }],
+    validResponse: {
+      games: [
+        {
+          chessid: '20260901-001',
+          black: 'a',
+          white: 'b',
+          date: '2026-09-01',
+          result: 'B+2.5',
+        },
+      ],
+    },
+    invalidResponses: [
+      {},
+      { games: [{ chessid: 1, black: '', white: '', date: '', result: '' }] },
+      { games: 'all of them' },
+    ],
+  },
+  'fox:import': {
+    validRequest: { chessid: '20260901-001' },
+    invalidRequests: [{}, { chessid: '' }],
+    validResponse: { gameId: 'abc', duplicate: false },
+    invalidResponses: [{}, { gameId: 'abc' }, { gameId: 'abc', duplicate: 'no' }],
+  },
   'gpu:status': {
     validRequest: {},
     invalidRequests: [null, 'status'],

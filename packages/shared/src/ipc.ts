@@ -204,6 +204,42 @@ export const CHANNELS = {
     response: batchStatusSchema,
   },
   /**
+   * Fox (野狐) public-kifu sync (M5 Stage 5). Isolated by the integrations
+   * rule: the upstream is undocumented and can change without notice, so the
+   * service rate-limits (1 req / 2 s), never retries, and maps every failure
+   * onto the SOURCE_* integration codes. These channels carry the user's
+   * flow — resolve a nickname, page their public games, import one — while
+   * the protocol itself lives in `integrations/fox/` behind recorded
+   * fixtures. `fox:import` goes through the ordinary library path: same
+   * content-hash dedup, same `library:changed` event.
+   */
+  'fox:lookupUser': {
+    request: z.object({ nickname: z.string().min(1) }),
+    response: z.object({ uid: z.string(), nickname: z.string() }),
+  },
+  'fox:listGames': {
+    request: z.object({ uid: z.string().min(1), lastCode: z.string().optional() }),
+    response: z.object({
+      games: z.array(
+        z.object({
+          chessid: z.string(),
+          black: z.string(),
+          white: z.string(),
+          date: z.string(),
+          result: z.string(),
+        }),
+      ),
+    }),
+  },
+  'fox:import': {
+    request: z.object({ chessid: z.string().min(1) }),
+    response: z.object({
+      gameId: z.string(),
+      /** True when the game was already in the library (successful no-op). */
+      duplicate: z.boolean(),
+    }),
+  },
+  /**
    * The student profile (M4 Stage 3), derived on demand from the persisted
    * analysis rows of the student's own games — pure core, milliseconds, no
    * snapshot to invalidate. The response carries the three named weaknesses

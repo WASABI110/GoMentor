@@ -52,9 +52,7 @@ test.describe('the settings panel GPU backend rows', () => {
     // The select writes `engine.backend` through the settings bridge and the
     // document comes back — the same live-preference path `locate.ts` reads
     // per engine start.
-    await page
-      .getByTestId('settings-engine-backend')
-      .selectOption('opencl')
+    await page.getByTestId('settings-engine-backend').selectOption('opencl')
     await expect
       .poll(async () => {
         const result = await page.evaluate(async () => {
