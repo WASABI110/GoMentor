@@ -91,7 +91,11 @@ export interface DownloadResult {
 
 export interface FetchContext {
   /** Injectable for tests: bytes fetched from `url` into `filePath`, resuming from current size. Returns final size. */
-  readonly fetchBytes: (url: string, filePath: string) => Promise<number>
+  readonly fetchBytes: (
+    url: string,
+    filePath: string,
+    options?: FetchBytesOptions,
+  ) => Promise<number>
   /** Injectable for tests: extract a zip archive into `intoDir`, flattening regular files. */
   readonly extractZip: (zipPath: string, intoDir: string) => Promise<void>
   /** Injectable for tests: extract a Linux AppImage (self-extracting archive) into `intoDir`. */
@@ -117,6 +121,10 @@ export async function ensureFetched(
   url: string,
   dir: string,
   context: FetchContext = DEFAULT_CONTEXT,
+  options?: {
+    /** Byte-level progress from the underlying transfer (see FetchBytesOptions). */
+    readonly onProgress?: (received: number, total: number | null) => void
+  },
 ): Promise<DownloadResult> {
   await mkdir(dir, { recursive: true })
   const finalPath = join(dir, outputName(asset))
@@ -131,12 +139,18 @@ export async function ensureFetched(
       )
     }
     if (asset.sha256 === null) recordObservedSha256(asset, existing)
+    // A reused archive never re-downloads, so progress is one done-tick.
+    options?.onProgress?.(asset.bytes, asset.bytes)
     return { path: finalPath, sha256: existing, reused: true }
   }
 
   const partialPath = `${finalPath}.partial`
   // A stale .partial from a prior interrupted run resumes rather than restarts.
-  await context.fetchBytes(url, partialPath)
+  await context.fetchBytes(
+    url,
+    partialPath,
+    options?.onProgress === undefined ? undefined : { onProgress: options.onProgress },
+  )
   const downloaded = await sha256Of(partialPath)
   assertSize(asset, await sizeOf(partialPath))
 
@@ -165,6 +179,13 @@ export interface FetchBytesOptions {
   readonly stallTimeoutMs?: number
   /** An external abort (caller cancellation), composed with the stall timer. */
   readonly externalSignal?: AbortSignal
+  /**
+   * Byte-level progress, called per chunk with (received, total|null) — total
+   * is null when the server sent no Content-Length. Additive (M5 stage 4, the
+   * in-app GPU download's progress events); absent on every M2 call site, so
+   * existing behaviour and fakes are untouched.
+   */
+  readonly onProgress?: (received: number, total: number | null) => void
 }
 
 /**
@@ -177,7 +198,7 @@ export async function fetchBytes(
   filePath: string,
   options?: FetchBytesOptions,
 ): Promise<number> {
-  const { stallTimeoutMs, externalSignal } = options ?? {}
+  const { stallTimeoutMs, externalSignal, onProgress } = options ?? {}
   const current = existsSync(filePath) ? await sizeOf(filePath) : 0
   const headers: Record<string, string> = {}
   if (current > 0) headers['Range'] = `bytes=${String(current)}-`
@@ -211,6 +232,14 @@ export async function fetchBytes(
     )
   }
 
+  // Content-Length on a resumed read is the REMAINING bytes; the reported
+  // total is the whole file (current + remaining), null when absent.
+  const remaining = response.headers.get('content-length')
+  const parsed = remaining === null ? NaN : Number.parseInt(remaining, 10)
+  const expectedTotal = Number.isNaN(parsed) ? null : current + parsed
+  let received = current
+  onProgress?.(received, expectedTotal)
+
   // 'a' so an existing partial is appended to, honouring the Range offset.
   const out: WriteStream = createWriteStream(filePath, { flags: 'a' })
   let total = current
@@ -240,6 +269,8 @@ export async function fetchBytes(
         await new Promise<void>((resolve) => out.once('drain', resolve))
       }
       total += buffer.length
+      received += buffer.length
+      onProgress?.(received, expectedTotal)
       if (stallTimeoutMs !== undefined) {
         stallTimer = setTimeout(() => {
           // Fail loudly: record the reason, then abort the read so the body

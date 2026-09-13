@@ -46,10 +46,11 @@
 - [x] settings i18n gpuHint 键（zh/en）
 
 **剩余（下一会话从这里继续）**：
-- [ ] 设置页引擎区 GPU 下载流（in-app 调 ensureFetched + 进度事件 + backend 选择 UI；现用 CLI + 设置文件）
+- [ ] **应用内 GPU 下载**（一次被撤回的尝试，教训在案）：gpu 服务/handlers 代码已写好但跨树 import `scripts/fetch-engine.ts` 与 desktop CJS tsconfig 冲突（`import.meta` + rootDir），include 扩展不解（module 设置不同）。**正解：先把 fetch-engine+manifest 移入 workspace 包（如 packages/engines 或并入 core 的非 Electron 面），再接 UI**。通道契square已在分支历史（本文件 git log 可寻回 `gpu:status`/`gpu:download` + `gpu:progress` 的 schema 与 A9 用例草稿）。现用户路径 = CLI `pnpm fetch:gpu` + 设置文件 engine.backend（locate 已按 start 时读偏好）。
+- [ ] 设置页引擎区：backend 选择 + 下载按钮（依赖上一条）
 - [ ] e2e：假后端 zip 的下载/选择流
 - [ ] CI full-offline asset job（release.yml 加 job：core+tier2+双权重打 zip）
-- [ ] 探测顺序变异条目（mutate- 新 harness 或并入既有）
+- [ ] 探测顺序变异条目（selectBackend 已有单测，变异条目并入 mutate- 新 harness）
 - [ ] 残余记录：OpenCL zip 在当前网络路径 6 连"fetch failed"（curl 直连同 reset；CUDA 同链路成功——环境性，CI 网络待验证）
 - **Verify（stage 范围）**：C4
 
