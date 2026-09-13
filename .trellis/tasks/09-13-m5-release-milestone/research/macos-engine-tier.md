@@ -53,6 +53,14 @@ tier-2 选型与精确字节数（实施时照抄，无需再查）：
 - linux opencl zip 体积与 tier-1 linux eigenavx2（41,821,245，AppImage 包装）同量级 → `appImage: true` 可能适用，Stage 4 实施时以 unzip 列表核实。
 - `+bs50` 变体存在（大 batch 构建）——与 tier-1 同理不选（CPU/单用户场景非 batch bound）。
 
+## 可复现性实测（2026-09-13，M5 Stage 1）
+
+**KataGo 源构建在这些 runner 上不可逐字节复现**：同一 ref、同一 recipe、暖 ccache、固定 mtime 的 zip，跨 run 仍产出不同字节（实测 4c75db7 与 cf5af0c 两轮，arm64/x64 双双漂移：9f370f30→cb44e431、8233eb4f→376f503a）。代码生成随 runner 镜像状态漂移，非本管线可控制。
+
+**对策 = publish-once 语义**：Release 冻结首次发布的字节；manifest 钉死那一次的 bytes/sha256（自回执实测）；重建相同则上传为 no-op，不同则 `::warning::` 跳过上传（绝不静默 clobber——任何已记录的 TOFU 哈希都不会被脚底下换掉）。更新引擎 = 有意的版本 bump（KATAGO_REF + manifest 同提交），新版本落全新 tag。工作流保持绿，TOFU 链稳定。
+
+守卫演进史（同日三轮）：对比"已发布字节"（堵死合法重钉）→ 对比"manifest 钉扎"（引号 bug 使 grep 双双落空、守卫空转——`grep` 模式不得带引号字符）→ publish-once（最终形态）。
+
 ## M2 research 回填说明
 
 implement.md 原计划回填 `09-03-katago-analysis-engine/research/bundled-binary-packaging.md`——该文件在已归档任务内（按惯例冻结不改），macOS ad-hoc 签名与 Gatekeeper 知识已完整并入本文件，指向归档件即可。

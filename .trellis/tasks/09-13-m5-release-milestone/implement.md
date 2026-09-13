@@ -8,13 +8,14 @@
 
 ## Stage 1 — macOS 引擎层（R1, C3）
 
-- [ ] 实施第一步：GitHub API 核实 KataGo v1.18.1 源码构建依赖/后端开关（memory：先验证前提）；回填 `research/bundled-binary-packaging.md`
-- [ ] `katago-manifest.ts`：`EngineTarget` + `engine.sourceBuilds` 段（arm64 METAL / Intel OPENCL，ref v1.18.1）+ sidecar asset id
-- [ ] CI workflow：macos-15 arm64 + macos-13 Intel 编译、ad-hoc 深签、`katago version` 探针、ccache、path 过滤；Release asset 上传；notarization 接缝（可选 secrets）
-- [ ] `locate.ts` / `currentEngineTarget()` / fetch 脚本 darwin 支持
-- [ ] macos runner 打包启动 + 引擎探针 e2e（EngineStatus 走出 unavailable）
-- **Verify（stage 范围）**：C3；win/linux 打包门禁零回归；trellis 门禁
-- **提交**：`feat(m5/stage1): macOS engine tier — CI source builds, ad-hoc sign, darwin targets`
+- [x] 实施第一步：GitHub API 核实 KataGo v1.18.1 编译事实（Compiling.md@92ee95c：METAL 用 ninja+protobuf+abseil；**macos-13 已退役** → `macos-15-intel`，2027-08 到期；Apple Silicon 无 AVX2；tarball 构建 `-DNO_GIT_REVISION=1`）；tier-2 资产命名与字节数一并核实（见 research/macos-engine-tier.md）
+- [x] `katago-manifest.ts`：`EngineTarget` + `engine.sourceBuilds` 段 + darwin targets（bytes/sha256 自发布回执实测钉死）
+- [x] CI workflow `katago-macos.yml`：macos-15 arm64 METAL + macos-15-intel x64 OPENCL（**brew cmake 4 无法探测 Xcode Swift——用镜像预装 cmake 3.x**）、in-source 构建、ad-hoc 深签、`katago version` 探针、ccache、path 过滤、确定性打包（touch 固定 mtime）+ **漂移守卫（构建哈希必须 ∈ manifest 钉扎；守卫 grep 不得带引号——4c75db7 实测引号 bug 使守卫空转）**、Release asset 发布；notarization 接缝（可选 secrets，未配置跳过）
+- [x] `locate.ts` / `currentEngineTarget()` / fetch-katago / electron-builder darwin-arm64 支持；打包门禁 spec 删除 darwin `unavailable` 特例（mac 走真引擎路径，Metal 首跑着色器编译 90s 超时）
+- [x] macos runner 打包启动 + 引擎探针 e2e（EngineStatus 走出 unavailable）——**cf5af0c 全绿**：macOS fetch 冻结资产 → e2e → 打包 → 真 Metal 引擎打包启动门禁通过
+- **Verify（stage 范围）**：C3 ✓（macos CI 实证）；win/linux 零回归 ✓（cf5af0c windows/ubuntu/repo gates 全绿）；trellis 门禁随终局
+- **提交**：`fd9b77c`(workflow) → `1816db2`/`f8f1702`(cmake 修复) → `ed62725`/`4c75db7`/`cf5af0c`(确定性打包+守卫) + `a3ef962`(应用侧 darwin) + `02754fe`(publish-once)
+- **残余（记 final-gate）**：源构建不可逐字节复现 → publish-once 语义（research/macos-engine-tier.md）；Intel tier 无打包消费者且 runner 2027-08 退役；GH_TOKEN 未配前 mac 引擎资产已发布、不阻塞
 
 ## Stage 2 — 遥测本地接线（R2, C1）
 
