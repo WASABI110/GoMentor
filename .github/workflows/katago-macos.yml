@@ -189,13 +189,17 @@ jobs:
           retention-days: 14
 
       # Publish to the release tag katago-<version> (created from the current
-      # master SHA on first run). The drift guard is the point: the manifest
-      # pins these assets' sha256, and this workflow re-runs on unrelated
-      # manifest edits. If a rebuild's bytes differ from what is already
-      # published under the same tag, uploading would silently invalidate
-      # every pinned hash — so that case FAILS here instead. A deliberate
-      # engine change bumps KATAGO_REF (and the manifest in the same commit),
-      # which lands on a fresh tag with nothing to drift from.
+      # master SHA on first run). The drift guard compares the BUILT hash
+      # against what scripts/katago-manifest.ts pins — the invariant users
+      # actually depend on (a fetch verifies against the manifest). If the
+      # manifest already names this asset but pins a different hash, the
+      # rebuild drifted (toolchain update, nondeterministic codegen) and
+      # uploading would break every pinned fetch → FAIL, and the new hash is
+      # in the error so it can be re-pinned deliberately. If the manifest
+      # does not name the asset yet, this is a bootstrap: upload, then pin.
+      # A rebuild that reproduces the pinned bytes (the normal case — ccache
+      # makes rebuilds byte-identical and the zip mtime is fixed) publishes
+      # as a no-op.
       - name: Publish release asset
         if: github.ref == 'refs/heads/master'
         env:
@@ -209,12 +213,10 @@ jobs:
               --notes "CI-built KataGo $KATAGO_REF for the GoMentor macOS engine tier (arm64: METAL, x64: OpenCL). Ad-hoc signed. Consumed by \`pnpm fetch:katago\`; checksums are pinned in scripts/katago-manifest.ts."
           for zip in katago-src/cpp/katago-darwin-*.zip; do
             name="$(basename "$zip")"
-            receipt="$zip.sha256"
-            new="$(awk '{print $1}' "$receipt")"
-            if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name.sha256" --dir existing 2>/dev/null; then
-              old="$(awk '{print $1}' "existing/$name.sha256")"
-              if [ "$new" != "$old" ]; then
-                echo "::error::$name bytes drifted (published $old, built $new) without a version bump. If the engine changed, bump KATAGO_REF and the manifest together; if not, investigate the build's reproducibility."
+            new="$(awk '{print $1}' "$zip.sha256")"
+            if grep -qF "\"$name\"" scripts/katago-manifest.ts; then
+              if ! grep -qF "\"$new\"" scripts/katago-manifest.ts; then
+                echo "::error::$name built hash $new is not what the manifest pins — the build drifted. Re-pin the manifest from this receipt if the drift is understood, or investigate reproducibility."
                 exit 1
               fi
             fi
