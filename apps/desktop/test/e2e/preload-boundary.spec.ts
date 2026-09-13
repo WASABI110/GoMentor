@@ -217,6 +217,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'settings',
       'engine',
       'batch',
+      'gpu',
       'profile',
       'onLlmDelta',
       'onLlmDone',
@@ -227,6 +228,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'onEngineAnalysis',
       'onBatchProgress',
       'onUpdateStatus',
+      'onGpuProgress',
     ].sort(),
   )
 })
