@@ -1,0 +1,177 @@
+name: katago-macos
+
+# Builds the KataGo engine for macOS, where upstream publishes no binaries
+# (scripts/katago-manifest.ts — the manifest is the pin's source of truth).
+# The payload is published as a GoMentor release asset under the tag
+# `katago-<version>`; `pnpm fetch:katago` on a macOS machine (or the CI
+# matrix) downloads it through the same TOFU checksum chain as the official
+# win/linux assets.
+#
+# Build recipes are the ones upstream documents for macOS (Compiling.md,
+# verified 2026-09-13 at tag 92ee95c):
+#   arm64: METAL  — cmake -G Ninja -DUSE_BACKEND=METAL; brew ninja protobuf abseil
+#   x64:   OPENCL — cmake + make; no extra deps beyond libzip
+# Apple Silicon has no AVX2 and darwin builds set no USE_AVX2 at all;
+# -DNO_GIT_REVISION=1 because the build must not depend on git metadata.
+#
+# Runner labels, verified 2026-09-13: macos-13 (the last x86_64 image people
+# remember) was RETIRED 2025-12-04; Intel jobs must use `macos-15-intel`,
+# which GitHub guarantees only until 2027-08 — after that the x64 tier dies
+# with it, and darwin-x64 returns to unavailable-by-construction. That
+# deadline is recorded in the manifest comment too.
+#
+# Publishing needs `contents: write` to create/upload the release. There is
+# deliberately no pull_request trigger, so a fork can never reach this
+# workflow with a write token; push runs land on master only.
+
+on:
+  push:
+    branches: [master]
+    # Engine inputs only. Touching the workflow itself re-runs it (so the
+    # recipe is testable); touching the manifest re-runs it (so a version or
+    # backend bump is picked up); nothing else pays for a 20-minute compile.
+    paths:
+      - '.github/workflows/katago-macos.yml'
+      - 'scripts/katago-manifest.ts'
+  workflow_dispatch:
+
+concurrency:
+  # Workflow-level context only — matrix is not available here, and the two
+  # arch jobs are independent anyway; a second push just re-runs them.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  # Keep in step with KATAGO_MANIFEST.engine.version in scripts/katago-manifest.ts.
+  # Duplicated here because the workflow cannot import TypeScript; the manifest
+  # path filter above makes a version bump touch this file in the same commit.
+  KATAGO_REF: v1.18.1
+
+jobs:
+  build:
+    name: ${{ matrix.target }} (${{ matrix.backend }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+            backend: METAL
+            buildSystem: ninja
+            brewDeps: cmake ninja libzip protobuf abseil ccache
+          - target: darwin-x64
+            runner: macos-15-intel
+            backend: OPENCL
+            buildSystem: make
+            brewDeps: cmake libzip ccache
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout KataGo source at the pinned ref
+        uses: actions/checkout@v4
+        with:
+          repository: lightvector/KataGo
+          ref: ${{ env.KATAGO_REF }}
+          # A source snapshot, not a working clone: we build it, we do not
+          # develop it, and the full history buys nothing.
+          fetch-depth: 1
+          path: katago-src
+
+      - name: Install build dependencies (Homebrew)
+        run: brew install ${{ matrix.brewDeps }}
+
+      # Content-addressed on the engine ref + backend: a rebuild of the same
+      # pin reuses object files, a version bump misses. The path also holds the
+      # final binary so the upload step can find it without a second cache.
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/ccache
+            katago-build/katago
+          key: katago-macos-${{ matrix.target }}-${{ env.KATAGO_REF }}-v2
+
+      - name: Configure (cmake)
+        working-directory: katago-src/cpp
+        run: |
+          cmake -B ../../katago-build -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_BACKEND=${{ matrix.backend }} -DNO_GIT_REVISION=1 \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        working-directory: katago-build
+        run: |
+          if [ "${{ matrix.buildSystem }}" = "ninja" ]; then
+            ninja
+          else
+            make -j"$(sysctl -n hw.ncpu)"
+          fi
+
+      # The engine must answer before it ships — a build that links but cannot
+      # start (Metal shader issue, missing runtime) must fail here, not at
+      # first launch on a user's machine.
+      - name: Probe (katago version)
+        working-directory: katago-build
+        run: ./katago version
+
+      # Ad-hoc deep-sign: Apple Silicon refuses to spawn UNSIGNED child
+      # processes, and every GoMentor install spawns KataGo as a child
+      # (KaTrain's CI does the same for the same reason). No Apple developer
+      # identity is involved — `-(dash)` is the ad-hoc identity — so this is
+      # not notarization and macOS will still show the Open Anyway flow for
+      # the downloaded app. Documented in the install docs (Stage 6).
+      - name: Ad-hoc deep-sign and verify
+        working-directory: katago-build
+        run: |
+          codesign --deep --force --sign - katago
+          codesign --verify --deep --strict katago
+          codesign -dv katago 2>&1 | head -3
+
+      - name: Package (zip + sha256)
+        working-directory: katago-build
+        # zip (not tar.gz): fetch-engine.ts's extractor is the zip reader, and
+        # zip preserves the exec bit the extracted binary needs. The sha256
+        # sidecar file lets the manifest pin the measured hash (the manifest
+        # is the authority; the sidecar file in the release is the receipt).
+        run: |
+          VERSION="${KATAGO_REF#v}"
+          NAME="katago-${{ matrix.target }}-${VERSION}"
+          mkdir payload
+          cp katago payload/
+          ( cd payload && zip "../${NAME}.zip" katago )
+          shasum -a 256 "${NAME}.zip" > "${NAME}.zip.sha256"
+          cat "${NAME}.zip.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-engine
+          path: |
+            katago-build/katago-darwin-*.zip
+            katago-build/katago-darwin-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      # Publish to the release tag katago-<version> (created from the current
+      # master SHA on first run). Idempotent: an existing release is reused,
+      # `--clobber` replaces a stale asset of the same name. Re-publishing a
+      # DIFFERENT build under the same tag breaks the TOFU chain for anyone
+      # who already fetched the old bytes — bump KATAGO_REF (and the manifest)
+      # instead of re-running this for an already-published version.
+      - name: Publish release asset
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${KATAGO_REF#v}"
+          TAG="katago-${VERSION}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "KataGo $KATAGO_REF macOS builds" \
+              --notes "CI-built KataGo $KATAGO_REF for the GoMentor macOS engine tier (arm64: METAL, x64: OpenCL). Ad-hoc signed. Consumed by \`pnpm fetch:katago\`; checksums are pinned in scripts/katago-manifest.ts + katago-checksums.json."
+          gh release upload "$TAG" katago-build/katago-darwin-*.zip katago-build/katago-darwin-*.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber

@@ -1,0 +1,28 @@
+{
+  "id": "m5-release-milestone",
+  "name": "m5-release-milestone",
+  "title": "M5: Release Milestone — locales, auto-update, telemetry, macOS tier, GPU tier-2, Fox sync, marketing site",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "anon",
+  "assignee": "anon",
+  "createdAt": "2026-09-13",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Ship milestone: macOS engine tier (unsigned ad-hoc), local-only telemetry, GitHub-Releases auto-update, GPU tier-2 + full-offline bundle, Fox public-kifu sync, Astro marketing site (zh+en), v1.0.0. Locales ja/ko/th/vi cancelled by user."
+  }
+}

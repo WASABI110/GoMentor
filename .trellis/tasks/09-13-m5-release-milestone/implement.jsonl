@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/09-13-m5-release-milestone/prd.md", "reason": "M5 requirements R1-R7, confirmed scope decisions (macOS unsigned, local-only telemetry, CUDA+OpenCL, public-fox-only), acceptance C1-C8"}
+{"file": ".trellis/tasks/09-13-m5-release-milestone/design.md", "reason": "Technical design D1-D10 per workstream: locales gate math, macOS CI build matrix, telemetry local invariants, updater eligibility, tier-2 backend probe, fox protocol layering, site shape"}
+{"file": ".trellis/tasks/09-13-m5-release-milestone/research/fox-protocol.md", "reason": "Verified Fox endpoints from lizzieyzy-next GetFoxRequest.java (GPL-compatible port), pagination + payload normalization notes"}
+{"file": ".trellis/tasks/09-13-m5-release-milestone/research/macos-engine-tier.md", "reason": "macOS build matrix (macos-15 METAL / macos-13 OpenCL), ad-hoc deep-sign precedent, CI cost model"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "integrations/fox/ planned location and isolation rules (own rate limiter, recorded fixtures, no core flow depends on it)"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Gate conventions: mutation harness baseline/anchor guards, A9 meta-test rules, no unbounded retries, verify-premise discipline"}
+{"file": "docs/architecture.md", "reason": "The manifest/TOFU checksum story, CI asset cache model, and the M1 telemetry no-op seam that M5 wires — recorded context the stage builds on"}
+{"file": "docs/ipc-contract.md", "reason": "New M5 channels/events (update:status, fox:*) must be documented here; the ipc-doc meta-test fails undocumented channels"}

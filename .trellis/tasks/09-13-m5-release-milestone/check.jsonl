@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check gate definition: typecheck/lint/test/e2e/format/i18n/licenses/trellis + mutation harness conventions + verify-before-rationale rule"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Handler-file conventions, integrations isolation rule, path construction via paths.ts"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "No secrets/content in logs — telemetry local log and fox client must comply"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Renderer component/store conventions for locale sweep, updater toast, fox import UI, GPU download flow"}
+{"file": ".trellis/tasks/09-13-m5-release-milestone/prd.md", "reason": "Acceptance criteria C1-C8 are the check targets; scope decisions bound what to flag as out-of-scope drift"}
+{"file": "docs/ipc-contract.md", "reason": "Every new channel/event (update:status, fox:*) must be documented here — ipc-doc test enforces"}
