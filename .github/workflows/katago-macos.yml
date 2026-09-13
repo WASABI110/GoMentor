@@ -188,18 +188,20 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Publish to the release tag katago-<version> (created from the current
-      # master SHA on first run). The drift guard compares the BUILT hash
-      # against what scripts/katago-manifest.ts pins — the invariant users
-      # actually depend on (a fetch verifies against the manifest). If the
-      # manifest already names this asset but pins a different hash, the
-      # rebuild drifted (toolchain update, nondeterministic codegen) and
-      # uploading would break every pinned fetch → FAIL, and the new hash is
-      # in the error so it can be re-pinned deliberately. If the manifest
-      # does not name the asset yet, this is a bootstrap: upload, then pin.
-      # A rebuild that reproduces the pinned bytes (the normal case — ccache
-      # makes rebuilds byte-identical and the zip mtime is fixed) publishes
-      # as a no-op.
+      # PUBLISH-ONCE semantics (measured: KataGo source builds are NOT
+      # byte-reproducible across runs on these runners — cf5af0c's two jobs
+      # built different bytes than 4c75db7's from the same ref, recipe, warm
+      # ccache, and fixed-mtime zip; codegen drifts with runner image state,
+      # so an equality guard against manifest pins would fail every run).
+      #
+      # The invariant that survives: the RELEASE freezes its first published
+      # bytes, the manifest pins exactly those (measured from the receipt),
+      # and every later fetch verifies against them. A rebuild that matches
+      # the frozen bytes uploads as a no-op; one that drifted is skipped with
+      # a loud warning — never silently clobbered, so no one's recorded TOFU
+      # hash is broken under their feet. Updating the engine is therefore a
+      # deliberate act: bump KATAGO_REF (with the manifest in the same
+      # commit), which lands on a fresh tag with nothing frozen yet.
       - name: Publish release asset
         if: github.ref == 'refs/heads/master'
         env:
@@ -214,15 +216,17 @@ jobs:
           for zip in katago-src/cpp/katago-darwin-*.zip; do
             name="$(basename "$zip")"
             new="$(awk '{print $1}' "$zip.sha256")"
-            # Plain-substring greps, no quote characters: the manifest's
-            # string quoting style (single/double) is not this workflow's
-            # business — measured: quoting the pattern made both greps miss
-            # and the guard silently guarded nothing (4c75db7).
-            if grep -qF "$name" scripts/katago-manifest.ts; then
-              if ! grep -qF "$new" scripts/katago-manifest.ts; then
-                echo "::error::$name built hash $new is not what the manifest pins — the build drifted. Re-pin the manifest from this receipt if the drift is understood, or investigate reproducibility."
-                exit 1
+            rm -rf existing && mkdir existing
+            if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name.sha256" --dir existing 2>/dev/null &&
+               [ -f "existing/$name.sha256" ]; then
+              old="$(awk '{print $1}' "existing/$name.sha256")"
+              if [ "$new" = "$old" ]; then
+                echo "$name: rebuilt bytes identical to the frozen release — nothing to publish"
+                continue
               fi
+              echo "::warning::$name built hash $new differs from the frozen release ($old). Publish-once: skipping upload so recorded hashes stay valid. To ship new engine bytes, bump KATAGO_REF and the manifest together — the new version gets a fresh tag."
+              continue
             fi
+            echo "bootstrapping $name into the release (first publish of this version)"
+            gh release upload "$TAG" "$zip" "$zip.sha256" --repo "$GITHUB_REPOSITORY"
           done
-          gh release upload "$TAG" katago-src/cpp/katago-darwin-*.zip katago-src/cpp/katago-darwin-*.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
