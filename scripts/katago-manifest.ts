@@ -103,6 +103,23 @@ export interface KatagoManifest {
         Record<'darwin-arm64' | 'darwin-x64', { readonly backend: 'METAL' | 'OPENCL' }>
       >
     }
+    /**
+     * GPU tier-2 (M5 Stage 4): official upstream CUDA + OpenCL builds, fetched
+     * on demand and never shipped in the installer (the tiered-installer rule
+     * — the core download stays analysis-capable and small). sha256 starts
+     * null and is recorded TOFU by the first fetch, exactly like tier-1.
+     * Backend names here are the user-facing identifiers stored in
+     * `settings.engine.backend`.
+     *
+     * cuda12.8 (not 13.x) is the default pick: CUDA 12 drivers are far more
+     * widespread at this writing. Names + bytes measured from the v1.18.1
+     * release asset listing (GitHub API, 2026-09-13); no `+bs50` variant —
+     * the CPU/latency-bound reasoning from tier-1 applies a fortiori.
+     */
+    readonly tier2: {
+      readonly cuda: Readonly<Record<'win32-x64' | 'linux-x64', EngineAsset>>
+      readonly opencl: Readonly<Record<'win32-x64' | 'linux-x64', EngineAsset>>
+    }
   }
   readonly weights: WeightAsset
   /** Recorded fallback if the benchmark gate rejects the primary net. */
@@ -208,6 +225,45 @@ export const KATAGO_MANIFEST: KatagoManifest = {
       builds: {
         'darwin-arm64': { backend: 'METAL' },
         'darwin-x64': { backend: 'OPENCL' },
+      },
+    },
+
+    tier2: {
+      cuda: {
+        'win32-x64': {
+          file: 'katago-v1.18.1-cuda12.8-cudnn9.8.0-windows-x64.zip',
+          bytes: 10_135_501,
+          sha256: null,
+          appImage: false,
+          archive: 'katago-v1.18.1-cuda12.8-cudnn9.8.0-windows-x64.zip',
+          binary: 'katago.exe',
+        },
+        'linux-x64': {
+          file: 'katago-v1.18.1-cuda12.8-cudnn9.8.0-linux-x64.zip',
+          bytes: 51_344_405,
+          sha256: null,
+          appImage: false,
+          archive: 'katago-v1.18.1-cuda12.8-cudnn9.8.0-linux-x64.zip',
+          binary: 'katago',
+        },
+      },
+      opencl: {
+        'win32-x64': {
+          file: 'katago-v1.18.1-opencl-windows-x64.zip',
+          bytes: 6_004_137,
+          sha256: null,
+          appImage: false,
+          archive: 'katago-v1.18.1-opencl-windows-x64.zip',
+          binary: 'katago.exe',
+        },
+        'linux-x64': {
+          file: 'katago-v1.18.1-opencl-linux-x64.zip',
+          bytes: 41_325_151,
+          sha256: null,
+          appImage: false,
+          archive: 'katago-v1.18.1-opencl-linux-x64.zip',
+          binary: 'katago',
+        },
       },
     },
   },
