@@ -48,7 +48,8 @@
     "networkPath": "权重文件",
     "maxVisits": "每手计算量",
     "threads": "线程数",
-    "analyzeOwnership": "计算势力图"
+    "analyzeOwnership": "计算势力图",
+    "gpuHint": "GPU 加速（可选）：在仓库目录运行 pnpm fetch:gpu 下载 CUDA/OpenCL 引擎（约 6-50MB），然后在 config 文件的 engine.backend 中填写 cuda 或 opencl。留空则自动使用内置 CPU 引擎。"
   },
   "library": {
     "roots": "监视目录",

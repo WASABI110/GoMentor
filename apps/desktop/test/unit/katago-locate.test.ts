@@ -4,8 +4,10 @@ import {
   engineTargetFor,
   planEngineLaunch,
   resolveEngineLayout,
+  selectBundledDir,
   selectNetworkFile,
   type EngineFs,
+  type EngineTarget,
 } from '../../src/main/katago/locate'
 
 /**
@@ -83,6 +85,47 @@ describe('engineTargetFor', () => {
     // Non-x64 architectures of supported platforms have no target.
     expect(engineTargetFor('win32', 'arm64')).toBeNull()
     expect(engineTargetFor('linux', 'arm64')).toBeNull()
+  })
+})
+
+describe('selectBundledDir', () => {
+  // Built with `join`, not forward-slash literals: production constructs the
+  // binary path with `join(preferred, BINARY_NAMES[target])`, and on Windows
+  // join normalises separators — the fake `binaryExists` must speak the same
+  // separator the code under test produces (this file header's standing rule).
+  const dirFor = (_target: EngineTarget, suffix: '' | '-cuda' | '-opencl'): string =>
+    join('/res', 'katago', `win32-x64${suffix}`)
+  const existsWhen =
+    (present: readonly string[]) =>
+    (binaryPath: string): boolean =>
+      present.some((p) => binaryPath.startsWith(p))
+
+  it('returns the tier-1 directory when there is no preference', () => {
+    expect(selectBundledDir('win32-x64', null, () => true, dirFor)).toBe(
+      dirFor('win32-x64', ''),
+    )
+  })
+
+  it('the preferred GPU directory wins when its binary exists', () => {
+    const cuda = dirFor('win32-x64', '-cuda')
+    expect(selectBundledDir('win32-x64', 'cuda', existsWhen([cuda]), dirFor)).toBe(cuda)
+  })
+
+  it('falls through to tier-1 when the preferred backend was never downloaded', () => {
+    // A preference is a preference, not a requirement: a directory the user
+    // never fetched must not surface as a missing-binary engine failure.
+    expect(selectBundledDir('win32-x64', 'cuda', existsWhen([]), dirFor)).toBe(
+      dirFor('win32-x64', ''),
+    )
+  })
+
+  it('checks for the binary, not the directory', () => {
+    // An empty directory (an interrupted fetch) must not count as present.
+    const cuda = dirFor('win32-x64', '-cuda')
+    const existsOnlyEmptyDir = (binaryPath: string): boolean => binaryPath === cuda // directory path itself "exists", the binary does not
+    expect(selectBundledDir('win32-x64', 'cuda', existsOnlyEmptyDir, dirFor)).toBe(
+      dirFor('win32-x64', ''),
+    )
   })
 })
 

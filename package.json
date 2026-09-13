@@ -28,7 +28,8 @@
     "check:trellis": "git diff --exit-code -- .trellis .claude .codex .qoder .agents AGENTS.md",
     "fetch:katago": "tsx scripts/fetch-katago.ts",
     "fetch:weights": "tsx scripts/fetch-weights.ts",
-    "make:icon": "tsx scripts/make-icon.ts"
+    "make:icon": "tsx scripts/make-icon.ts",
+    "fetch:gpu": "tsx scripts/fetch-katago.ts --gpu"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

@@ -52,9 +52,13 @@ import {
 import { RESOURCES_ROOT } from './resources'
 
 const fetchAll = process.argv.includes('--all')
+const fetchGpu = process.argv.includes('--gpu')
 
 /** The spawnable binary name after full extraction (AppImage payload or the exe). */
 const SPAWNABLE = 'katago'
+
+/** Mirrors packages/core `backends.ts` GPU_BACKENDS — scripts do not import core. */
+const GPU_BACKENDS = ['cuda', 'opencl'] as const
 
 /** Fetches one platform target; returns a human-readable outcome line. */
 async function fetchTarget(target: EngineTarget): Promise<string> {
@@ -99,10 +103,45 @@ async function extractEngine(
   await makeExecutable(join(dir, SPAWNABLE))
 }
 
+/**
+ * Fetches the tier-2 GPU backends for the current platform into
+ * `<target>-<backend>` directories (the layout `locate.ts`'s
+ * `selectBundledDir` resolves when `settings.engine.backend` names one).
+ * Both backends, sequentially: the point of tier-2 is choice — a machine
+ * whose CUDA runtime is missing still gets OpenCL.
+ */
+async function fetchGpuBackends(): Promise<void> {
+  const target = currentEngineTarget()
+  if (target === null || target.startsWith('darwin-')) {
+    console.log(`fetch-katago: no GPU tier-2 for ${process.platform}-${process.arch}`)
+    return
+  }
+  for (const backend of GPU_BACKENDS) {
+    const asset =
+      KATAGO_MANIFEST.engine.tier2[backend][target as 'win32-x64' | 'linux-x64']
+    const url = `${engineDownloadBase(target)}/${asset.file}`
+    const dir = engineDir(RESOURCES_ROOT, `${target}-${backend}`)
+    const archive = await ensureFetched(asset, url, dir)
+    // Tier-2 zips carry the engine and (for CUDA) its co-located runtime
+    // DLLs — the same flatten-into-one-directory contract as tier-1.
+    await extractZip(archive.path, dir)
+    await makeExecutable(join(dir, asset.binary))
+    persistRecordedChecksums()
+    console.log(
+      `${target}-${backend}: ${archive.reused ? 'reused' : 'fetched'} ${asset.file} -> ${dir}`,
+    )
+  }
+}
+
 async function main(): Promise<void> {
   // Sidecar first: once a recorded hash exists, this run verifies the archive
   // against it instead of recording a fresh one (TOFU — see katago-manifest.ts).
   applyRecordedChecksums(readRecordedChecksums())
+
+  if (fetchGpu) {
+    await fetchGpuBackends()
+    return
+  }
 
   if (fetchAll) {
     const targets = Object.keys(KATAGO_MANIFEST.engine.targets) as EngineTarget[]

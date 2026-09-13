@@ -4,6 +4,15 @@
     "engine:win32-x64": {
       "sha256": "0d62ffa41ee04dd89dd1b80fe45e306c837231cb1e2dccb4f5780d0ca7c313db"
     },
+    "engine:darwin-arm64": {
+      "sha256": "9f370f30fc1ca9d3ba82ffec7d26fb1d0de1fdff96d8a22c0a05c5416de0cf18"
+    },
+    "engine:darwin-x64": {
+      "sha256": "8233eb4f7137739a79f66727aba3fdbdaa7bc4483ff4f52d4db7425269ebd477"
+    },
+    "tier2:cuda:win32-x64": {
+      "sha256": "8caabc5675950f52d285a686c19727f7a56a982313a7f055ade060ba78df552e"
+    },
     "weights": {
       "sha256": "48d6754de3c4754f95bf6a5ca40957a49e5e915aaaeede133a17b9ccf8fa5fcb"
     },

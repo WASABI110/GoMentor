@@ -81,8 +81,8 @@ function createServices() {
   // `engine.backend` applies on the next engine start without a relaunch.
   const engine = createEngineService({
     settings,
-    locate: (env) =>
-      locateBundledEngine(env, backendPreference(settings.get().engine.backend)),
+    locate: () =>
+      locateBundledEngine(undefined, backendPreference(settings.get().engine.backend)),
   })
   const batch = createBatchService({ store, settings, engine, repository: analysis })
   const llm = createLlmService(settings, secrets, {

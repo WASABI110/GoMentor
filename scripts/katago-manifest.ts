@@ -385,6 +385,21 @@ function knownAssets(): readonly (readonly [string, EngineAsset | WeightAsset])[
     ...Object.entries(KATAGO_MANIFEST.engine.targets).map(
       ([target, asset]) => [`engine:${target}`, asset] as const,
     ),
+    // Tier-2 backends record under their own ids (`tier2:cuda:win32-x64`),
+    // measured — a fetch of one backend must not lose its TOFU record just
+    // because another backend's download failed in the same run.
+    ...(
+      Object.entries(KATAGO_MANIFEST.engine.tier2.cuda) as readonly [
+        'win32-x64' | 'linux-x64',
+        EngineAsset,
+      ][]
+    ).map(([target, asset]) => [`tier2:cuda:${target}`, asset] as const),
+    ...(
+      Object.entries(KATAGO_MANIFEST.engine.tier2.opencl) as readonly [
+        'win32-x64' | 'linux-x64',
+        EngineAsset,
+      ][]
+    ).map(([target, asset]) => [`tier2:opencl:${target}`, asset] as const),
     ['weights', KATAGO_MANIFEST.weights] as const,
     ['fallbackWeights', KATAGO_MANIFEST.fallbackWeights] as const,
   ]
