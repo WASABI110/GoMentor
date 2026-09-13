@@ -48,7 +48,8 @@
     "zoomOut": "Zoom Out",
     "fullScreen": "Toggle Full Screen",
     "help": "Help",
-    "revealLogs": "Reveal Logs"
+    "revealLogs": "Reveal Logs",
+    "revealCrashes": "Reveal Crash Reports"
   },
   "resize": {
     "library": "Resize library panel",

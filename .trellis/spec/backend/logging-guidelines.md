@@ -91,6 +91,6 @@ This is not generic caution. This app holds a user's LLM credentials and their p
 
 ## Telemetry
 
-Separate from logging, and **opt-in with default off**. Until consent, `telemetry.ts` is a no-op that makes **no network call whatsoever**.
+Separate from logging, and **opt-in with default off**. M5 made it **local-only**: there is no transport, in any state — `crashReporter` runs with `uploadToServer: false` (pinned by unit test + `scripts/mutate-telemetry.mts`) and the event log is a local JSONL beside the dumps ("Reveal crashes" opens it). Consent takes effect on next launch; until then nothing is written.
 
-When enabled: crashes only. Never gameplay content, SGF, chat text, or prompts. Content telemetry is permanently off the table for this project.
+When enabled: crashes and scalar-only lifecycle events. Never gameplay content, SGF, chat text, or prompts — the `TelemetryEvent` union is scalar-only by construction, so there is no shape content could be passed as. Content telemetry is permanently off the table for this project.

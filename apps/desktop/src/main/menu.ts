@@ -1,6 +1,6 @@
 import { Menu, app, shell, type MenuItemConstructorOptions } from 'electron'
 import type { Locale } from '@gomentor/shared'
-import { logsDir } from './paths'
+import { crashesDir, logsDir } from './paths'
 import { scoped } from './logger'
 import zhCN from '../renderer/src/i18n/locales/zh-CN/common.json'
 import en from '../renderer/src/i18n/locales/en/common.json'
@@ -147,6 +147,20 @@ export function buildMenu(actions: MenuActions, locale: Locale): Menu {
             // which reads to the user as a dead menu item.
             void shell.openPath(directory).then((error) => {
               if (error !== '') logger.warn('could not open logs directory', { error })
+            })
+          },
+        },
+        {
+          label: labels.revealCrashes,
+          click: () => {
+            // Same directory-open pattern as "Reveal logs". The item is always
+            // visible: without telemetry consent the directory is empty, and an
+            // empty folder IS the honest state — the consent setting lives in
+            // the settings panel, not behind a hidden menu item.
+            const directory = crashesDir()
+            void shell.openPath(directory).then((error) => {
+              if (error !== '')
+                logger.warn('could not open crashes directory', { error })
             })
           },
         },

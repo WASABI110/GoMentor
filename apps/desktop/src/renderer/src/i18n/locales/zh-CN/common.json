@@ -48,7 +48,8 @@
     "zoomOut": "缩小",
     "fullScreen": "全屏",
     "help": "帮助",
-    "revealLogs": "打开日志目录"
+    "revealLogs": "打开日志目录",
+    "revealCrashes": "打开崩溃报告目录"
   },
   "resize": {
     "library": "调整棋谱库面板大小",

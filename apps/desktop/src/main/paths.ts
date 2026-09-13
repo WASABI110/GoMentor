@@ -33,6 +33,27 @@ export function logsDir(): string {
   return join(userDataDir(), 'logs')
 }
 
+/**
+ * Local crash dumps and the telemetry event log. Written ONLY after explicit
+ * telemetry consent (`telemetry.ts`); with consent never given the directory
+ * stays empty, which is itself the honest state the "Reveal crashes" menu
+ * item shows. Electron's own `crashDumps` path is pointed here (`index.ts`),
+ * so Crashpad minidumps and the event JSONL share one directory a user can
+ * open from the menu and attach to a bug report.
+ */
+export function crashesDir(): string {
+  return join(userDataDir(), 'crashes')
+}
+
+/**
+ * The telemetry event log — a JSONL file beside the crash dumps, so "Reveal
+ * crashes" opens one directory that holds everything the consented telemetry
+ * story ever wrote. Rotation appends a `.1` suffix (`telemetry.ts`).
+ */
+export function telemetryLogFile(): string {
+  return join(crashesDir(), 'telemetry.jsonl')
+}
+
 /** The single log file. Rotation appends suffixes to this name. */
 export function logFile(): string {
   return join(logsDir(), 'main.log')

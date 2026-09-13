@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, crashReporter } from 'electron'
 import { CHANNEL_NAMES } from '@gomentor/shared'
 import { initLogging, scoped } from './logger'
 import { createSettingsService } from './settings'
@@ -13,7 +13,7 @@ import { buildSnapshot } from './ipc/profile.handlers'
 import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
-import { dbFile } from './paths'
+import { crashesDir, dbFile, telemetryLogFile } from './paths'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
 
@@ -36,6 +36,9 @@ import { applyMenu } from './menu'
 
 const logger = scoped('main:app')
 
+/** Process start, for the `app_quit` session-length event. */
+const appStartedAt = Date.now()
+
 /**
  * Settings are needed before `app.whenReady()` resolves in order to configure
  * logging, but `app.getPath('userData')` throws before ready. So the service is
@@ -45,6 +48,12 @@ const logger = scoped('main:app')
 let services: ReturnType<typeof createServices> | undefined
 
 function createServices() {
+  // Telemetry's consent gate reads the settings document; the crash dumps and
+  // the event JSONL share the crashes directory ("Reveal crashes" opens it).
+  // `crashReporter` is injected rather than imported inside telemetry.ts, which
+  // keeps that module pure Node; `uploadToServer: false` there is the whole
+  // transport policy and is pinned by unit test plus mutation.
+  app.setPath('crashDumps', crashesDir())
   const settings = createSettingsService()
   const secrets = createSecretsService(settings.secretStore, electronEncryptor)
   // Before the handlers and before the store: migrations run here, once, at
@@ -64,7 +73,12 @@ function createServices() {
     // builder, so the tool's numbers cannot drift from the UI's.
     profile: () => buildSnapshot({ store, repository: analysis, settings }),
   })
-  const telemetry = createTelemetry()
+  const telemetry = createTelemetry({
+    consented: settings.get().telemetryConsent,
+    logPath: telemetryLogFile(),
+    crashReporter,
+    now: () => new Date().toISOString(),
+  })
   return { settings, secrets, db, store, analysis, llm, engine, batch, telemetry }
 }
 
@@ -97,6 +111,17 @@ if (!gotLock) {
       platform: process.platform,
       arch: process.arch,
       version: app.getVersion(),
+    })
+
+    // An uncaught main-process exception is exactly what the local crash
+    // story exists for: the code is a fixed enum string (never the error's
+    // message — that can carry user content), the message itself goes only to
+    // the local log, and the minidump lands in the crashes directory when
+    // consented. Logging first so even an unconsented install has the detail
+    // in the log file.
+    process.on('uncaughtException', (error) => {
+      logger.error('uncaught exception', { error: error.message })
+      services?.telemetry.track({ name: 'crash', code: 'MAIN_UNCAUGHT_EXCEPTION' })
     })
 
     if (!created.secrets.isPersistent()) {
@@ -172,6 +197,12 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   logger.info('app quitting')
+  // The session-length event, while the telemetry that could write it still
+  // exists — the handlers and services shut down below.
+  services?.telemetry.track({
+    name: 'app_quit',
+    sessionSeconds: Math.round((Date.now() - appStartedAt) / 1000),
+  })
   // In-flight streams hold AbortControllers and an open HTTP connection. Left
   // running, the process would linger after the window closed.
   services?.llm.shutdown()
