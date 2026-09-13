@@ -23,7 +23,12 @@ interface FoxGame {
 }
 
 export function FoxImportSection(): React.JSX.Element {
-  const { t } = useTranslation(['library'])
+  // The fox strings live under the COMMON namespace's library section
+  // (`common.json` → `library.fox.*`) — there is no separate `library`
+  // namespace, and `useTranslation(['library'])` here rendered literal keys
+  // across every locale (measured: i18n untranslated-key spec failed on all
+  // three OS).
+  const { t } = useTranslation(['common', 'errors'])
   const [nickname, setNickname] = useState('')
   const [games, setGames] = useState<FoxGame[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -77,11 +82,11 @@ export function FoxImportSection(): React.JSX.Element {
 
   return (
     <div className="fox-import" data-testid="fox-import">
-      <h3>{t('library:fox.title')}</h3>
+      <h3>{t('common:library.fox.title')}</h3>
       <div className="settings-field settings-field--inline">
         <input
           data-testid="fox-nickname"
-          placeholder={t('library:fox.nicknamePlaceholder')}
+          placeholder={t('common:library.fox.nicknamePlaceholder')}
           value={nickname}
           onChange={(event) => {
             setNickname(event.target.value)
@@ -98,7 +103,7 @@ export function FoxImportSection(): React.JSX.Element {
             void handleLookup()
           }}
         >
-          {busy ? t('library:fox.searching') : t('library:fox.search')}
+          {busy ? t('common:library.fox.searching') : t('common:library.fox.search')}
         </button>
       </div>
 
@@ -124,21 +129,21 @@ export function FoxImportSection(): React.JSX.Element {
                 }}
               >
                 {imported[game.chessid] === 'imported'
-                  ? t('library:fox.imported')
+                  ? t('common:library.fox.imported')
                   : imported[game.chessid] === 'duplicate'
-                    ? t('library:fox.duplicate')
+                    ? t('common:library.fox.duplicate')
                     : imported[game.chessid] === 'error'
-                      ? t('library:fox.retry')
-                      : t('library:fox.import')}
+                      ? t('common:library.fox.retry')
+                      : t('common:library.fox.import')}
               </button>
             </li>
           ))}
           {games.length === 0 && (
-            <li className="settings-hint">{t('library:fox.noGames')}</li>
+            <li className="settings-hint">{t('common:library.fox.noGames')}</li>
           )}
         </ul>
       )}
-      <p className="settings-hint">{t('library:fox.isolationHint')}</p>
+      <p className="settings-hint">{t('common:library.fox.isolationHint')}</p>
     </div>
   )
 }

@@ -218,6 +218,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'engine',
       'batch',
       'gpu',
+      'fox',
       'profile',
       'onLlmDelta',
       'onLlmDone',

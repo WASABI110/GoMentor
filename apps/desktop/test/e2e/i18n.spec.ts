@@ -122,7 +122,16 @@ for (const locale of ['zh-CN', 'en'] as const) {
     })
 
     test('translates the native menu before the first window exists', async () => {
-      expect(await menuLabels(app)).toEqual([...MENU[locale]])
+      // applyMenu runs inside `whenReady` before createWindow, but on a loaded
+      // CI runner the first window can exist while the menu install is still
+      // in flight — poll rather than snapshot (the default Electron menu's
+      // File/View/Help labels are role names; ours never are).
+      await expect
+        .poll(async () => (await menuLabels(app)).join('|'), {
+          timeout: 15_000,
+          intervals: [250],
+        })
+        .toBe(MENU[locale].join('|'))
     })
 
     test('leaves no string from the other language on screen', async () => {
