@@ -46,6 +46,7 @@ export type Scope =
   | 'main:katago:session'
   | 'main:katago:batch'
   | 'main:telemetry'
+  | 'main:update'
   | 'renderer'
 
 export type LogFields = Record<string, unknown>

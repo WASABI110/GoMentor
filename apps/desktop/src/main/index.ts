@@ -1,4 +1,5 @@
 import { app, BrowserWindow, crashReporter } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { CHANNEL_NAMES } from '@gomentor/shared'
 import { initLogging, scoped } from './logger'
 import { createSettingsService } from './settings'
@@ -16,6 +17,7 @@ import { registerAllHandlers, removeAllHandlers } from './ipc'
 import { crashesDir, dbFile, telemetryLogFile } from './paths'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
+import { createUpdateService } from './update/update'
 
 /**
  * Main process entry: single-instance lock, lifecycle, IPC registration, window.
@@ -130,6 +132,25 @@ if (!gotLock) {
       logger.warn('OS encryption unavailable; secrets will be session-only')
     }
 
+    // Auto-update: eligibility is decided once here (packaged build, the
+    // user's setting, and the unsigned-macOS policy) and holds for the
+    // process. Ineligible builds emit one `update:status: disabled` so the
+    // settings panel can say why there is no updater; eligible ones get a
+    // startup check, and the menu item is only installed when it can work.
+    const update = createUpdateService({
+      // The UpdateDriver seam is wide on purpose (string event names, unknown
+      // payloads); electron-updater's typed `autoUpdater` satisfies it
+      // directly, and the mapping from its events to `update:status` — the
+      // actual logic — is what the unit tests pin.
+      driver: autoUpdater,
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      enabled: created.settings.get().autoUpdate.enabled,
+      emitStatus: (status) => {
+        emit('update:status', status)
+      },
+    })
+
     // The menu's actions, named so both the startup build and a later locale
     // change use the same closures. Inlining them at each call site would put the
     // openSgf handler in two places, and "which callback is the live menu using?"
@@ -141,6 +162,22 @@ if (!gotLock) {
         // be two paths to the same feature, and they would drift.
         emit('menu:command', { command: 'openSgf' })
       },
+      // Absent when updates are ineligible: buildMenu omits the item entirely
+      // rather than installing one that can only report a failure.
+      ...(update.eligibility.eligible
+        ? {
+            checkForUpdates: () => {
+              void update.checkForUpdates()
+            },
+          }
+        : {}),
+    }
+
+    if (update.eligibility.eligible) {
+      // One quiet startup check. Failures land in `update:status` (and the
+      // log) via the service — an offline launch must not surface an error
+      // dialog, the settings row shows the state instead.
+      void update.checkForUpdates()
     }
 
     // Before the window: the renderer calls settings:get on mount.

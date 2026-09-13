@@ -99,6 +99,19 @@ export const uiSettingsSchema = z.object({
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 
+/**
+ * Auto-update checks (M5). `enabled` gates the startup check and the menu
+ * item; the download itself is electron-updater's and installs on quit after
+ * prompting. Like telemetry consent, a change takes effect on next launch —
+ * the update service is constructed once per process. macOS ignores this
+ * section by policy: the build is unsigned (no Apple developer account), and
+ * Squirrel.Mac refuses unsigned updates (`updateEligibility.ts`).
+ */
+export const autoUpdateSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+})
+export type AutoUpdateSettings = z.infer<typeof autoUpdateSettingsSchema>
+
 export const settingsSchema = z
   .object({
     /** Bumped only for breaking migrations. */
@@ -114,6 +127,7 @@ export const settingsSchema = z
     ui: uiSettingsSchema.prefault({}),
     /** Opt-in, default off, no-op until consented. No content, ever. */
     telemetryConsent: z.boolean().default(false),
+    autoUpdate: autoUpdateSettingsSchema.prefault({}),
     debugLogging: z.boolean().default(false),
   })
   // Forward-compatibility: a newer build's keys survive a rollback's save.
@@ -182,6 +196,10 @@ const profilePatchSchema = z.object({
   playerNames: z.array(z.string()).optional(),
 })
 
+const autoUpdatePatchSchema = z.object({
+  enabled: z.boolean().optional(),
+})
+
 const uiPatchSchema = z.object({
   locale: localeSchema.optional(),
   theme: z.enum(['dark', 'light', 'system']).optional(),
@@ -202,6 +220,7 @@ export const settingsPatchSchema = z
     profile: profilePatchSchema.optional(),
     ui: uiPatchSchema.optional(),
     telemetryConsent: z.boolean().optional(),
+    autoUpdate: autoUpdatePatchSchema.optional(),
     debugLogging: z.boolean().optional(),
   })
   // Same forward-compat reason as `settingsSchema`: a newer renderer patching a

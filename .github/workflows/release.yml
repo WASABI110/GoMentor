@@ -1,0 +1,123 @@
+name: release
+
+# The publish chain (M5 Stage 3): a `v*` tag build produces the three
+# installers and publishes them to a GitHub Release, which is also the feed
+# `electron-updater` reads (electron-builder.yml's `publish:` block generates
+# each platform's `app-update.yml` at package time; the repo is public, so
+# feed reads need no token on user machines).
+#
+# ## The token boundary
+#
+# Publishing needs `GH_TOKEN` — a fine-grained PAT with Contents:write, added
+# as the `RELEASE_TOKEN` repository secret (user action item; the M5 gate
+# records it). Without the secret the build still runs to completion and
+# uploads the installers as workflow ARTIFACTS, so a release can be rehearsed
+# and its artifacts inspected before any token exists — `--publish never`
+# below is only about the GH publish step, not about producing installers.
+#
+# ## Why tags only
+#
+# `--publish always` on every push would attach a release to every commit.
+# PRs from forks never run this workflow at all, so a fork can never reach
+# the publish step's secrets.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    # Secrets cannot be tested for emptiness in a step `if` directly; this
+    # job-level env is the standard spelling, and the publish step below
+    # branches on it.
+    env:
+      RELEASE_TOKEN_PRESENT: ${{ secrets.RELEASE_TOKEN != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # The darwin engine comes from this repo's frozen katago-v1.18.1
+      # release (the katago-macos workflow publishes it once per version);
+      # win/linux come from upstream. Same TOFU chain as the CI matrix.
+      - name: Restore KataGo engine + weights
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/resources
+          key: katago-${{ runner.os }}-${{ hashFiles('scripts/katago-manifest.ts') }}
+
+      - name: Fetch KataGo engine + weights
+        run: |
+          pnpm fetch:katago
+          pnpm fetch:weights
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: End-to-end (Linux, headless display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm e2e
+
+      - name: End-to-end
+        if: runner.os != 'Linux'
+        run: pnpm e2e
+
+      # Always `--publish never` at the electron-builder level: publishing is
+      # either the explicit step below (with the token) or artifacts-only
+      # (without it). Letting electron-builder decide means a stray draft
+      # release or a "token not set" crash, depending on environment.
+      - name: Package installers
+        run: pnpm package
+
+      # The same gate the CI matrix runs: a released installer must be the
+      # one the launch gate proved.
+      - name: Packaged launch gate (Linux, headless display)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm --filter @gomentor/desktop exec playwright test packaged-launch
+
+      - name: Packaged launch gate
+        if: runner.os != 'Linux'
+        run: pnpm --filter @gomentor/desktop exec playwright test packaged-launch
+
+      - name: Publish to the GitHub Release
+        if: env.RELEASE_TOKEN_PRESENT == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: pnpm --filter @gomentor/desktop exec electron-builder --publish always
+
+      - name: Upload artifacts (rehearsal path, no token configured)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: apps/desktop/dist
+          if-no-files-found: ignore
+          retention-days: 14

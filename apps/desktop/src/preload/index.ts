@@ -201,6 +201,8 @@ const api = Object.freeze({
     subscribe('engine:analysis', listener),
   onBatchProgress: (listener: (payload: EventPayload<'batch:progress'>) => void) =>
     subscribe('batch:progress', listener),
+  onUpdateStatus: (listener: (payload: EventPayload<'update:status'>) => void) =>
+    subscribe('update:status', listener),
 })
 
 export type GoMentorApi = typeof api

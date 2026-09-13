@@ -532,6 +532,25 @@ const EVENT_CASES: Record<
       },
     ],
   },
+  'update:status': {
+    // The other states are shape-identical subsets; the desktop unit suite
+    // (test/unit/update.test.ts) drives every electron-updater event through
+    // the mapping that produces them.
+    valid: { state: 'downloaded', version: '1.1.0' },
+    invalid: [
+      {},
+      // A bare string is not a payload — the state enum is the contract.
+      'downloading',
+      // Progress is a bounded number, not a tick counter.
+      { state: 'downloading', progress: 120 },
+      { state: 'downloading', progress: 'half' },
+      // The state enum is closed: electron-updater's internal event names do
+      // not leak through the mapping.
+      { state: 'update-not-available' },
+      // The renderer-transit rule: an error carries a message, never a stack.
+      { state: 'error', error: { message: 'x', stack: 'at ...' } },
+    ],
+  },
 }
 
 function expectAccepts(schema: ZodType, value: unknown, label: string): void {

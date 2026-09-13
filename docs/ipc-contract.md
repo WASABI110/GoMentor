@@ -222,6 +222,10 @@ Batch-run progress: `batchProgressSchema` — `{ status, total, done, failed, er
 
 Terminal states: `done` (every queued game finished), `cancelled` (the user stopped the run), `failed` (the engine was lost mid-run — `error` carries the typed envelope, usually an `ENGINE_*` code). Per-game failures are **not** errors on this face: they are the `failed` count, the game is marked `failed` in the ledger, and it is retried on the next run. Cancellation likewise leaves unfinished games `pending` for the next run's resume.
 
+### `update:status`
+
+Auto-update lifecycle: `{ state, version?, progress?, error? }`. Emitted on transitions only — `checking`, `available` (with `version`), `downloading` (with `progress`, throttled by electron-updater itself), `downloaded` (quitting installs it), `error` (a message string, never a stack), and `idle` after a check found nothing. One `disabled` payload is emitted at startup when the update service is ineligible — an unpackaged dev build, `settings.autoUpdate.enabled` off, or the unsigned-macOS policy (`updateEligibility.ts`) — so the settings panel can say why there is no updater instead of showing a dead row. There is no invoke channel on this face: the startup check is automatic, the menu's "Check for Updates" item calls the service directly, and the renderer only listens.
+
 ## Adding a channel
 
 1. Add it to `CHANNELS` or `EVENTS` in [`ipc.ts`](../packages/shared/src/ipc.ts) with both schemas.

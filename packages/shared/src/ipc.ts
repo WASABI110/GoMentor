@@ -277,6 +277,31 @@ export const EVENTS = {
    * `failed` count, and the game is retried on the next run.
    */
   'batch:progress': batchProgressSchema,
+
+  /**
+   * Auto-update lifecycle (M5). Emitted on state transitions only — checking,
+   * available (with the version), download progress (electron-updater's own
+   * throttling), downloaded (the renderer prompts "restart to install"), an
+   * error, or `idle` after a not-available check. `disabled` is sent once at
+   * startup when eligibility fails (dev build, setting off, or the unsigned
+   * macOS policy) so the settings panel can say WHY there is no updater
+   * instead of showing a dead row. Errors carry a message string only — never
+   * a stack (the renderer-transit rule).
+   */
+  'update:status': z.object({
+    state: z.enum([
+      'idle',
+      'checking',
+      'available',
+      'downloading',
+      'downloaded',
+      'error',
+      'disabled',
+    ]),
+    version: z.string().optional(),
+    progress: z.number().min(0).max(100).optional(),
+    error: z.string().optional(),
+  }),
 } as const
 
 export type Events = typeof EVENTS

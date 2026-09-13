@@ -73,6 +73,14 @@ function labelsFor(locale: Locale): MenuLabels {
 export interface MenuActions {
   /** Triggers the renderer's open flow, so the picker and the import share a path. */
   openSgf(): void
+  /**
+   * Runs one update check — present only when the update service is eligible
+   * (`updateEligibility.ts`). An absent action means the menu omits the item
+   * entirely: on macOS (unsigned, Squirrel refuses) or with the setting off,
+   * a "check for updates" item that can only ever report a failure is not
+   * chrome, it is a lie.
+   */
+  checkForUpdates?(): void
 }
 
 export function buildMenu(actions: MenuActions, locale: Locale): Menu {
@@ -164,6 +172,19 @@ export function buildMenu(actions: MenuActions, locale: Locale): Menu {
             })
           },
         },
+        // Help is the natural home and the item is platform-conditional: the
+        // spread is empty when the caller did not pass the action (see
+        // MenuActions.checkForUpdates).
+        ...(actions.checkForUpdates === undefined
+          ? []
+          : [
+              {
+                label: labels.checkForUpdates,
+                click: () => {
+                  actions.checkForUpdates?.()
+                },
+              },
+            ]),
       ],
     },
   ]

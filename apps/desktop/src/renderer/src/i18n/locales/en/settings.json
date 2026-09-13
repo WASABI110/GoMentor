@@ -6,7 +6,8 @@
     "engine": "Analysis Engine",
     "profile": "Student profile",
     "library": "Library",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "about": "About"
   },
   "ui": {
     "locale": "Language",
@@ -62,7 +63,6 @@
       "playerNamesPlaceholder": "One name per line",
       "playerNamesHint": "Games are matched by these names (either colour, case-insensitive) as the student profile's input. Professional games are excluded by default; mark them manually in the library."
     },
-
     "telemetryConsent": "Send anonymous usage statistics",
     "telemetryHint": "Off by default. Crashes and feature counts only — never game records, chat, or keys.",
     "debugLogging": "Enable debug logging",
@@ -73,5 +73,20 @@
     "title": "The key cannot be stored securely",
     "body": "This machine offers no system encrypted storage, so the key lasts only for this session and must be entered again after a restart."
   },
-  "saved": "Saved"
+  "saved": "Saved",
+  "about": {
+    "telemetryConsent": "Collect crash reports (local only)",
+    "telemetryConsentHint": "Off by default. When on, crash dumps and a few anonymous events (version, engine start — scalars only) are written to a local directory — never sent over the network, and never containing games, chats, or anything you type. See what was collected any time via Help → Reveal Crash Reports. Takes effect on next launch."
+  },
+  "update": {
+    "state": {
+      "idle": "Up to date",
+      "checking": "Checking for updates…",
+      "available": "Version {{version}} available — downloading…",
+      "downloading": "Downloading update… {{progress}}%",
+      "downloaded": "Version {{version}} is ready — it installs when you quit",
+      "error": "Update check failed: {{error}}",
+      "disabled": "Auto-update is unavailable here (unpackaged dev build, disabled in settings, or the unsigned macOS build)"
+    }
+  }
 }

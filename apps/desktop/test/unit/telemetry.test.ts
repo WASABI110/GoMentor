@@ -371,11 +371,19 @@ describe('the 1 MB rotation', () => {
   it('a small log is appended, not rotated', async () => {
     const telemetry = createTelemetry(deps())
     telemetry.track({ name: 'app_quit', sessionSeconds: 1 })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // Sequenced on the OBSERVED effect, not a fixed sleep: two appends in a
+    // loaded worker can take longer than any constant backoff, and the second
+    // append must wait for the first to be on disk (appends are fire-and-
+    // forget, and an unordered pair would be a real ordering bug).
+    await expect
+      .poll(() => lines().parsed.length, { timeout: 5_000, intervals: [10] })
+      .toBe(1)
     telemetry.track({ name: 'app_quit', sessionSeconds: 2 })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await expect
+      .poll(() => lines().parsed.length, { timeout: 5_000, intervals: [10] })
+      .toBe(2)
 
-    expect(lines().parsed).toHaveLength(2)
+    expect(lines().parsed.map((line) => line['sessionSeconds'])).toEqual([1, 2])
     expect(() => statSync(`${logPath}.1`)).toThrow()
   })
 })

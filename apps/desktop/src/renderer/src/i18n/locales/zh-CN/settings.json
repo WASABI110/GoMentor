@@ -6,7 +6,8 @@
     "engine": "分析引擎",
     "profile": "学生画像",
     "library": "棋谱库",
-    "privacy": "隐私"
+    "privacy": "隐私",
+    "about": "关于"
   },
   "ui": {
     "locale": "语言",
@@ -62,7 +63,6 @@
       "playerNamesPlaceholder": "每行一个名字",
       "playerNamesHint": "按名字(任一颜色,大小写不敏感)识别你自己的对局,作为学生画像的输入。职业棋默认不计入;可在棋库中手动标记。"
     },
-
     "telemetryConsent": "发送匿名使用统计",
     "telemetryHint": "默认关闭。只包含崩溃与功能计数,绝不包含棋谱、对话或密钥。",
     "debugLogging": "启用调试日志",
@@ -73,5 +73,20 @@
     "title": "无法安全保存密钥",
     "body": "这台电脑没有可用的系统加密存储,密钥只在本次运行期间有效,关闭后需要重新输入。"
   },
-  "saved": "已保存"
+  "saved": "已保存",
+  "about": {
+    "telemetryConsent": "收集崩溃报告（仅保存在本机）",
+    "telemetryConsentHint": "默认关闭。开启后，崩溃转储与少量匿名事件（版本、引擎启动等标量信息）只写入本机目录——绝不发送到网络，且不含任何棋谱、对话或输入内容。可随时从「帮助 → 打开崩溃报告目录」查看收集了什么。更改在下次启动时生效。"
+  },
+  "update": {
+    "state": {
+      "idle": "已是最新版本",
+      "checking": "正在检查更新…",
+      "available": "发现新版本 {{version}}，正在下载…",
+      "downloading": "正在下载更新… {{progress}}%",
+      "downloaded": "新版本 {{version}} 已就绪，重启应用后自动安装",
+      "error": "更新检查失败：{{error}}",
+      "disabled": "自动更新在此环境下不可用（未打包的开发版、已在设置中关闭、或 macOS 未签名构建）"
+    }
+  }
 }

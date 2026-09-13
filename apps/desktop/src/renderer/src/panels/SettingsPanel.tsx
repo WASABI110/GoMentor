@@ -1,9 +1,37 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { LlmProviderKind, Settings } from '@gomentor/shared'
+import type { EventPayload, LlmProviderKind, Settings } from '@gomentor/shared'
 import { useSettingsStore } from '../state/settingsStore'
+import { useIpcEvent } from '../hooks/useIpcEvent'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Button, Input, Select } from '../components/ui'
+
+/**
+ * The auto-update status line. Module scope, not nested in the panel: a
+ * component type defined inside another component's body is a NEW type every
+ * render, so React would unmount and remount it each time the panel
+ * re-rendered — dropping its state and resubscribing the event for nothing.
+ */
+function UpdateStatusRow(): React.JSX.Element {
+  const { t } = useTranslation(['settings'])
+  const [status, setStatus] = useState<EventPayload<'update:status'> | null>(null)
+  useIpcEvent(window.gomentor.onUpdateStatus, setStatus)
+
+  // `idle` is also the honest default before any event arrives: an eligible
+  // build fires its startup check immediately, and a disabled one receives
+  // its `disabled` payload at construction — there is no third quiet state.
+  const state = status?.state ?? 'idle'
+  return (
+    <p className="settings-hint" data-testid="settings-update-status">
+      {t(`settings:update.state.${state}`, {
+        version: status?.version ?? '',
+        progress:
+          status?.progress !== undefined ? String(Math.round(status.progress)) : '0',
+        error: status?.error ?? '',
+      })}
+    </p>
+  )
+}
 
 /**
  * Provider configuration and API-key entry.
@@ -158,7 +186,11 @@ export function SettingsPanel(): React.JSX.Element {
               })
             }}
           >
-            {(['zh-CN', 'en', 'ja', 'ko', 'th', 'vi'] as const).map((locale) => (
+            {/* Two locales by scope decision (2026-09-13): ja/ko/th/vi were
+              cancelled, not deferred — the schema still accepts a stored
+              six-locale value from an older build (it falls back to the
+              English catalogue), but this panel offers what exists. */}
+            {(['zh-CN', 'en'] as const).map((locale) => (
               <option key={locale} value={locale}>
                 {t(`common:localeName.${locale}`)}
               </option>
@@ -292,6 +324,30 @@ export function SettingsPanel(): React.JSX.Element {
           />
         </label>
         <p className="settings-hint">{t('settings:profile.playerNamesHint')}</p>
+      </fieldset>
+
+      <fieldset className="settings-section">
+        <legend>{t('settings:section.about')}</legend>
+
+        {/* Read straight from the document like locale: a checkbox has no
+          keystroke storm, and the state must match what main owns. Like
+          telemetry consent, the change takes effect on next launch — the hint
+          says so, because a toggle that "does nothing" without that sentence
+          reads as broken. */}
+        <label className="settings-field settings-field--inline">
+          <input
+            type="checkbox"
+            data-testid="settings-telemetry-consent"
+            checked={settings.telemetryConsent}
+            onChange={(event) => {
+              void update({ telemetryConsent: event.target.checked })
+            }}
+          />
+          <span>{t('settings:about.telemetryConsent')}</span>
+        </label>
+        <p className="settings-hint">{t('settings:about.telemetryConsentHint')}</p>
+
+        <UpdateStatusRow />
       </fieldset>
 
       <Button
