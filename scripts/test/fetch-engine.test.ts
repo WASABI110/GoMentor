@@ -11,13 +11,13 @@ import {
   readRecordedChecksums,
   recordObservedSha256,
   type WeightAsset,
-} from '../katago-manifest'
+} from '../../packages/engines/src/katago-manifest'
 import {
   ensureFetched,
   fetchBytes,
   outputName,
   type FetchContext,
-} from '../fetch-engine'
+} from '../../packages/engines/src/fetch-engine'
 
 /**
  * The download/verify contract of the fetch chain, exercised against an
@@ -231,7 +231,7 @@ describe('checksum sidecar (TOFU persistence)', () => {
 
 describe('extractZip', () => {
   it('flattens a stored entry to its basename', async () => {
-    const { extractZip } = await import('../fetch-engine')
+    const { extractZip } = await import('../../packages/engines/src/fetch-engine')
     const zip = join(dir, 'a.zip')
     writeFileSync(zip, makeStoredZip('pkg/nested/katago.exe', 'MZ-fake'))
     const out = join(dir, 'out')
@@ -243,7 +243,7 @@ describe('extractZip', () => {
   })
 
   it('rejects a path-traversal entry rather than writing outside the dir', async () => {
-    const { extractZip } = await import('../fetch-engine')
+    const { extractZip } = await import('../../packages/engines/src/fetch-engine')
     const zip = join(dir, 'evil.zip')
     writeFileSync(zip, makeStoredZip('../escape.txt', 'x'))
     const out = join(dir, 'out2')

@@ -27,6 +27,8 @@
       "@gomentor/shared/*": ["../../packages/shared/src/*"],
       "@gomentor/core": ["../../packages/core/src/index.ts"],
       "@gomentor/core/*": ["../../packages/core/src/*"],
+      "@gomentor/engines": ["../../packages/engines/src/index.ts"],
+      "@gomentor/engines/*": ["../../packages/engines/src/*"],
       "@main/*": ["./src/main/*"]
     }
   },

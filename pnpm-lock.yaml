@@ -44,6 +44,9 @@ importers:
       '@gomentor/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@gomentor/engines':
+        specifier: workspace:*
+        version: link:../../packages/engines
       '@gomentor/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -123,6 +126,8 @@ importers:
       fast-check:
         specifier: ^3.23.2
         version: 3.23.2
+
+  packages/engines: {}
 
   packages/shared:
     dependencies:

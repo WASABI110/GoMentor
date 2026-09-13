@@ -41,6 +41,8 @@
     "BATCH_ALREADY_RUNNING": "A batch analysis is already running.",
     "SOURCE_UNREACHABLE": "The external service could not be reached.",
     "SOURCE_AUTH_EXPIRED": "Your sign-in has expired. Please sign in again.",
-    "SOURCE_SCHEMA_CHANGED": "The external service changed its data format, so this feature is unavailable for now."
+    "SOURCE_SCHEMA_CHANGED": "The external service changed its data format, so this feature is unavailable for now.",
+    "GPU_ALREADY_DOWNLOADING": "A GPU backend download is already running — try again when it finishes.",
+    "GPU_PLATFORM_UNSUPPORTED": "No downloadable GPU backend exists for this platform."
   }
 }

@@ -33,13 +33,19 @@
 
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   KATAGO_MANIFEST,
   applyRecordedChecksums,
   persistRecordedChecksums,
   readRecordedChecksums,
-} from './katago-manifest'
-import { ensureFetched, weightsDir } from './fetch-engine'
+} from '../packages/engines/src/katago-manifest'
+
+/** The committed TOFU sidecar, beside the manifest it belongs to. */
+const SIDECAR = fileURLToPath(
+  new URL('../packages/engines/src/katago-checksums.json', import.meta.url),
+)
+import { ensureFetched, weightsDir } from '../packages/engines/src/fetch-engine'
 import { RESOURCES_ROOT } from './resources'
 
 /**
@@ -63,12 +69,12 @@ async function pruneNonPrimaryWeights(dir: string, primary: string): Promise<voi
 async function main(): Promise<void> {
   // Sidecar first: once a recorded hash exists, this run verifies against it
   // instead of recording a fresh one (TOFU — see katago-manifest.ts).
-  applyRecordedChecksums(readRecordedChecksums())
+  applyRecordedChecksums(readRecordedChecksums(SIDECAR))
 
   const net = KATAGO_MANIFEST.weights
   const wasUnpinned = net.sha256 === null
   const result = await ensureFetched(net, net.url, weightsDir(RESOURCES_ROOT))
-  persistRecordedChecksums()
+  persistRecordedChecksums(SIDECAR)
   await pruneNonPrimaryWeights(weightsDir(RESOURCES_ROOT), net.name)
 
   const verb = result.reused ? 'reused' : 'fetched'

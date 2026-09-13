@@ -7,6 +7,94 @@ import { ErrorNotice } from '../components/ErrorNotice'
 import { Button, Input, Select } from '../components/ui'
 
 /**
+ * The GPU tier-2 backend rows: one per downloadable backend, showing whether
+ * it is on disk, a download button when it is not, and live progress while it
+ * fetches. Status is fetched on mount and the `gpu:progress` event folds into
+ * the same state — the download button disappears the moment the binary
+ * exists (`downloaded` reads the layout, not a flag we set).
+ */
+function GpuBackends(): React.JSX.Element {
+  const { t } = useTranslation(['settings'])
+  const [status, setStatus] = useState<{
+    backends: { backend: 'cuda' | 'opencl'; downloaded: boolean; preferred: boolean }[]
+  } | null>(null)
+  const [progress, setProgress] = useState<EventPayload<'gpu:progress'> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.gomentor.gpu
+      .status({})
+      .then((result) => {
+        if (result.ok) setStatus(result.data)
+        else setError(result.error.code)
+      })
+      .catch(() => { setError('IPC_HANDLER_FAILED'); })
+  }, [])
+  useIpcEvent(window.gomentor.onGpuProgress, setProgress)
+
+  const running =
+    progress !== null &&
+    (progress.state === 'downloading' || progress.state === 'extracting')
+
+  async function startDownload(backend: 'cuda' | 'opencl'): Promise<void> {
+    setError(null)
+    const result = await window.gomentor.gpu.download({ backend })
+    if (!result.ok) setError(result.error.code)
+  }
+
+  return (
+    <div className="settings-gpu" data-testid="settings-gpu">
+      {error !== null && (
+        <p className="settings-hint" data-testid="settings-gpu-error">
+          {t('errors:errorCodes.' + error, { defaultValue: error })}
+        </p>
+      )}
+      {(status?.backends ?? []).map((backend) => {
+        const live =
+          progress !== null &&
+          progress.backend === backend.backend &&
+          (progress.state === 'downloading' || progress.state === 'extracting')
+        const percent =
+          progress !== null &&
+          progress.backend === backend.backend &&
+          progress.received !== undefined &&
+          progress.total
+            ? Math.round((progress.received / progress.total) * 100)
+            : null
+        return (
+          <div
+            key={backend.backend}
+            className="settings-field settings-field--inline"
+            data-testid={`settings-gpu-${backend.backend}`}
+          >
+            <span>GPU ({backend.backend.toUpperCase()})</span>
+            {backend.downloaded ? (
+              <span>{t('settings:engine.downloaded')}</span>
+            ) : live ? (
+              <span data-testid={`settings-gpu-${backend.backend}-progress`}>
+                {t('settings:engine.download')}…{' '}
+                {percent !== null ? `${String(percent)}%` : ''}
+              </span>
+            ) : (
+              <Button
+                data-testid={`settings-gpu-${backend.backend}-download`}
+                disabled={running}
+                onClick={() => {
+                  void startDownload(backend.backend)
+                }}
+              >
+                {t('settings:engine.download')}
+              </Button>
+            )}
+          </div>
+        )
+      })}
+      <p className="settings-hint">{t('settings:engine.gpuHint')}</p>
+    </div>
+  )
+}
+
+/**
  * The auto-update status line. Module scope, not nested in the panel: a
  * component type defined inside another component's body is a NEW type every
  * render, so React would unmount and remount it each time the panel
@@ -348,6 +436,35 @@ export function SettingsPanel(): React.JSX.Element {
         <p className="settings-hint">{t('settings:about.telemetryConsentHint')}</p>
 
         <UpdateStatusRow />
+      </fieldset>
+
+      <fieldset className="settings-section">
+        <legend>{t('settings:section.engine')}</legend>
+        <label className="settings-field">
+          <span>{t('settings:engine.backend')}</span>
+          <Select
+            data-testid="settings-engine-backend"
+            value={settings.engine.backend ?? ''}
+            onChange={(event) => {
+              const value = event.target.value
+              void update({
+                engine: {
+                  backend:
+                    value === '' ? null : (value as Settings['engine']['backend']),
+                },
+              })
+            }}
+          >
+            <option value="">{t('settings:engine.backendAuto')}</option>
+            <option value="eigen">CPU (Eigen)</option>
+            <option value="cuda">CUDA</option>
+            <option value="opencl">OpenCL</option>
+          </Select>
+        </label>
+
+        <GpuBackends />
+
+        <p className="settings-hint">{t('settings:engine.gpuHint')}</p>
       </fieldset>
 
       <Button

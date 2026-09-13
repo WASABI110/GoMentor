@@ -36,7 +36,12 @@ delete process.env['ELECTRON_RUN_AS_NODE']
 // resolution at all, so *any* runtime `require` of a non-Electron module throws
 // `module not found` (measured). `src/preload/index.ts` therefore takes only
 // type-only imports, and this exclusion is the second layer of that guarantee.
-const WORKSPACE_DEPS = ['@gomentor/shared', '@gomentor/core', 'zod']
+const WORKSPACE_DEPS = [
+  '@gomentor/shared',
+  '@gomentor/core',
+  '@gomentor/engines',
+  'zod',
+]
 
 export default defineConfig({
   main: {
@@ -45,6 +50,7 @@ export default defineConfig({
       alias: {
         '@gomentor/shared': resolve('../../packages/shared/src'),
         '@gomentor/core': resolve('../../packages/core/src'),
+        '@gomentor/engines': resolve('../../packages/engines/src'),
         '@main': resolve('src/main'),
       },
     },

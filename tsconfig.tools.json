@@ -8,6 +8,7 @@
     "checkJs": false
   },
   "include": [
+    "packages/engines/src/**/*.ts",
     "eslint.config.js",
     "vitest.config.ts",
     "scripts/**/*.ts",

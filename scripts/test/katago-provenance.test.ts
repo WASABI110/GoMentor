@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { KATAGO_MANIFEST } from '../katago-manifest'
+import { KATAGO_MANIFEST } from '../../packages/engines/src/katago-manifest'
 import { REPO_ROOT } from '../resources'
 
 /**

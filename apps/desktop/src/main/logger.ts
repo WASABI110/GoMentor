@@ -45,6 +45,7 @@ export type Scope =
   | 'main:katago:service'
   | 'main:katago:session'
   | 'main:katago:batch'
+  | 'main:katago:gpu'
   | 'main:telemetry'
   | 'main:update'
   | 'renderer'

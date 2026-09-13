@@ -16,6 +16,7 @@ import {
 // before `vi.mock` takes effect — the reason the value imports below are dynamic.
 import type { SettingsFs } from '../../src/main/settings'
 import type { SqliteDatabase } from '../../src/main/db/connection'
+import type { GpuService } from '../../src/main/katago/gpu'
 
 /**
  * IPC handler integration: every channel registered, every response valid
@@ -278,6 +279,7 @@ beforeEach(() => {
     llm,
     engine,
     batch,
+    gpu: fakeGpu(),
     analysis: createAnalysisRepository(db),
     now: () => NOW,
     relabelMenu: (locale) => relabelCalls.push(locale),
@@ -348,6 +350,7 @@ describe('registration covers the contract', () => {
         llm,
         engine,
         batch,
+        gpu: fakeGpu(),
         analysis: createAnalysisRepository(db),
         now: () => NOW,
         relabelMenu: (locale) => relabelCalls.push(locale),
@@ -419,6 +422,7 @@ describe('the boundary rejects bad requests', () => {
       llm,
       engine,
       batch,
+      gpu: fakeGpu(),
       analysis: createAnalysisRepository(db),
       now: () => NOW,
       relabelMenu: (locale) => relabelCalls.push(locale),
@@ -910,7 +914,62 @@ describe('every channel is exercised', () => {
       'batch:cancel',
       'batch:status',
       'profile:get',
+      'gpu:status',
+      'gpu:download',
     ]
     expect([...exercised].sort()).toEqual([...CHANNEL_NAMES].sort())
+  })
+})
+
+/**
+ * The GPU service double: nothing downloaded, downloads succeed as a stub —
+ * these tests assert handler wiring and envelopes, not the fetch pipeline
+ * (see test/unit/gpu.test.ts for the service logic).
+ */
+function fakeGpu(): GpuService {
+  return {
+    status: () => ({
+      backends: [
+        { backend: 'cuda', downloaded: false, preferred: false },
+        { backend: 'opencl', downloaded: false, preferred: false },
+      ],
+    }),
+    download: () => ({ started: true }),
+  }
+}
+
+describe('gpu channels (M5 stage 4)', () => {
+  it('gpu:status returns the service snapshot', async () => {
+    const result = await invoke('gpu:status', {})
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({
+      backends: [
+        { backend: 'cuda', downloaded: false, preferred: false },
+        { backend: 'opencl', downloaded: false, preferred: false },
+      ],
+    })
+  })
+
+  it('gpu:download routes the backend and records the settings selection', async () => {
+    const before = sentEvents.filter((e) => e.channel === 'gpu:progress').length
+    const result = await invoke('gpu:download', { backend: 'cuda' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.data).toEqual({ started: true })
+
+    // The settings write is the "download-then-select" half: the settings
+    // service here is the real one over a memory fs, so the document the
+    // handler patched must come back through `settings:get`.
+    const doc = await invoke('settings:get', {})
+    expect(doc.ok).toBe(true)
+    if (!doc.ok) throw new Error('unreachable')
+    expect((doc.data as { engine: { backend: string | null } }).engine.backend).toBe(
+      'cuda',
+    )
+
+    // No progress event here: the fake never downloads. Progress emission is
+    // the service's own contract (test/unit/gpu.test.ts).
+    expect(sentEvents.filter((e) => e.channel === 'gpu:progress').length).toBe(before)
   })
 })

@@ -46,6 +46,18 @@ export function crashesDir(): string {
 }
 
 /**
+ * The app's own TOFU sidecar for tier-2 GPU downloads. The COMMITTED sidecar
+ * (`packages/engines/src/katago-checksums.json`) is the CLI/CI chain — it
+ * records hashes observed at build time and ships nowhere. Runtime downloads
+ * from the app record into this userData file instead: a packaged install has
+ * no repo to write into, and the same refuse-to-overwrite rule applies per
+ * file, so an app-recorded hash pins exactly the bytes this install fetched.
+ */
+export function enginesChecksumsFile(): string {
+  return join(userDataDir(), 'engines-checksums.json')
+}
+
+/**
  * The telemetry event log — a JSONL file beside the crash dumps, so "Reveal
  * crashes" opens one directory that holds everything the consented telemetry
  * story ever wrote. Rotation appends a `.1` suffix (`telemetry.ts`).

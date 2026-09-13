@@ -181,6 +181,12 @@ const api = Object.freeze({
       invoke('batch:status', request),
   }),
 
+  gpu: Object.freeze({
+    status: (request: ChannelRequest<'gpu:status'>) => invoke('gpu:status', request),
+    download: (request: ChannelRequest<'gpu:download'>) =>
+      invoke('gpu:download', request),
+  }),
+
   profile: Object.freeze({
     get: (request: ChannelRequest<'profile:get'>) => invoke('profile:get', request),
   }),
@@ -203,6 +209,8 @@ const api = Object.freeze({
     subscribe('batch:progress', listener),
   onUpdateStatus: (listener: (payload: EventPayload<'update:status'>) => void) =>
     subscribe('update:status', listener),
+  onGpuProgress: (listener: (payload: EventPayload<'gpu:progress'>) => void) =>
+    subscribe('gpu:progress', listener),
 })
 
 export type GoMentorApi = typeof api

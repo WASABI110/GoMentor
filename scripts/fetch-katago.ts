@@ -32,6 +32,7 @@
 
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   KATAGO_MANIFEST,
   applyRecordedChecksums,
@@ -41,14 +42,19 @@ import {
   readRecordedChecksums,
   type EngineAsset,
   type EngineTarget,
-} from './katago-manifest'
+} from '../packages/engines/src/katago-manifest'
+
+/** The committed TOFU sidecar, beside the manifest it belongs to. */
+const SIDECAR = fileURLToPath(
+  new URL('../packages/engines/src/katago-checksums.json', import.meta.url),
+)
 import {
   engineDir,
   ensureFetched,
   extractAppImage,
   extractZip,
   makeExecutable,
-} from './fetch-engine'
+} from '../packages/engines/src/fetch-engine'
 import { RESOURCES_ROOT } from './resources'
 
 const fetchAll = process.argv.includes('--all')
@@ -126,7 +132,7 @@ async function fetchGpuBackends(): Promise<void> {
     // DLLs — the same flatten-into-one-directory contract as tier-1.
     await extractZip(archive.path, dir)
     await makeExecutable(join(dir, asset.binary))
-    persistRecordedChecksums()
+    persistRecordedChecksums(SIDECAR)
     console.log(
       `${target}-${backend}: ${archive.reused ? 'reused' : 'fetched'} ${asset.file} -> ${dir}`,
     )
@@ -136,7 +142,7 @@ async function fetchGpuBackends(): Promise<void> {
 async function main(): Promise<void> {
   // Sidecar first: once a recorded hash exists, this run verifies the archive
   // against it instead of recording a fresh one (TOFU — see katago-manifest.ts).
-  applyRecordedChecksums(readRecordedChecksums())
+  applyRecordedChecksums(readRecordedChecksums(SIDECAR))
 
   if (fetchGpu) {
     await fetchGpuBackends()
@@ -151,7 +157,7 @@ async function main(): Promise<void> {
       // Linux AppImage cannot extract on a non-Linux host — `--appimage-extract`
       // executes the image) must not discard an earlier completed download's
       // TOFU record, and a 40MB re-download is the cost of losing it.
-      persistRecordedChecksums()
+      persistRecordedChecksums(SIDECAR)
     }
     return
   }
@@ -170,7 +176,7 @@ async function main(): Promise<void> {
     return
   }
   console.log(await fetchTarget(current))
-  persistRecordedChecksums()
+  persistRecordedChecksums(SIDECAR)
 }
 
 main().catch((error: unknown) => {

@@ -14,11 +14,12 @@ import { buildSnapshot } from './ipc/profile.handlers'
 import { emit } from './ipc/events'
 import { createTelemetry } from './telemetry'
 import { registerAllHandlers, removeAllHandlers } from './ipc'
-import { crashesDir, dbFile, telemetryLogFile } from './paths'
+import { crashesDir, dbFile, enginesChecksumsFile, telemetryLogFile } from './paths'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
 import { createUpdateService } from './update/update'
 import { locateBundledEngine } from './katago/locate'
+import { createNodeGpuService } from './katago/gpu'
 
 /**
  * `settings.engine.backend` → the locate-level preference: a GPU backend name
@@ -85,6 +86,14 @@ function createServices() {
       locateBundledEngine(undefined, backendPreference(settings.get().engine.backend)),
   })
   const batch = createBatchService({ store, settings, engine, repository: analysis })
+  // GPU tier-2 (M5 Stage 4): the in-app download face of the fetch pipeline.
+  const gpu = createNodeGpuService({
+    checksumsPath: enginesChecksumsFile(),
+    preference: () => settings.get().engine.backend,
+    emitProgress: (progress) => {
+      emit('gpu:progress', progress)
+    },
+  })
   const llm = createLlmService(settings, secrets, {
     store,
     engine,
@@ -98,7 +107,7 @@ function createServices() {
     crashReporter,
     now: () => new Date().toISOString(),
   })
-  return { settings, secrets, db, store, analysis, llm, engine, batch, telemetry }
+  return { settings, secrets, db, store, analysis, llm, engine, batch, gpu, telemetry }
 }
 
 // Two instances would fight over settings, the log file, and — from M2 —
@@ -199,6 +208,7 @@ if (!gotLock) {
 
     // Before the window: the renderer calls settings:get on mount.
     registerAllHandlers({
+      gpu: created.gpu,
       store: created.store,
       settings: created.settings,
       secrets: created.secrets,

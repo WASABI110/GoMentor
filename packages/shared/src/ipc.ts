@@ -215,6 +215,37 @@ export const CHANNELS = {
     request: empty,
     response: profileSnapshotSchema,
   },
+  /**
+   * GPU tier-2 state (M5 Stage 4): which backends are downloaded (their
+   * binary exists in the fetch layout) and which one
+   * `settings.engine.backend` names. Read on settings-panel mount; the live
+   * download story is `gpu:download` + the `gpu:progress` event.
+   */
+  'gpu:status': {
+    request: empty,
+    response: z.object({
+      backends: z.array(
+        z.object({
+          backend: z.enum(['cuda', 'opencl']),
+          /** The engine binary exists in the fetch layout for this platform. */
+          downloaded: z.boolean(),
+          /** `settings.engine.backend` names this backend. */
+          preferred: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  /**
+   * Fetches one GPU backend from the pinned upstream assets (same TOFU chain
+   * as the CLI's `pnpm fetch:gpu`). Returns immediately; progress arrives on
+   * the `gpu:progress` event. One download at a time — a second concurrent
+   * request is the typed error `GPU_ALREADY_DOWNLOADING`, because two
+   * writers to one `.partial` file would corrupt each other's resumes.
+   */
+  'gpu:download': {
+    request: z.object({ backend: z.enum(['cuda', 'opencl']) }),
+    response: z.object({ started: z.boolean() }),
+  },
 } as const
 
 export type Channels = typeof CHANNELS
@@ -300,6 +331,20 @@ export const EVENTS = {
     ]),
     version: z.string().optional(),
     progress: z.number().min(0).max(100).optional(),
+    error: z.string().optional(),
+  }),
+
+  /**
+   * GPU tier-2 download progress (M5 Stage 4): one run per backend, states in
+   * order `downloading` (with `received`/`total` bytes; total null when the
+   * server sent no length), `extracting`, then `done` or `error`. Emitted on
+   * the service's throttle — at most a few per second, never per chunk.
+   */
+  'gpu:progress': z.object({
+    backend: z.enum(['cuda', 'opencl']),
+    state: z.enum(['downloading', 'extracting', 'done', 'error']),
+    received: z.number().int().min(0).optional(),
+    total: z.number().int().min(0).nullable().optional(),
     error: z.string().optional(),
   }),
 } as const

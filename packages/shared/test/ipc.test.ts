@@ -359,6 +359,33 @@ const CASES: Record<ChannelName, ChannelCase> = {
       { status: 'idle', total: 0, done: 1, failed: 0 },
     ],
   },
+  'gpu:status': {
+    validRequest: {},
+    invalidRequests: [null, 'status'],
+    validResponse: {
+      backends: [
+        { backend: 'cuda', downloaded: true, preferred: false },
+        { backend: 'opencl', downloaded: false, preferred: true },
+      ],
+    },
+    invalidResponses: [
+      {},
+      { backends: [{ backend: 'tensorrt', downloaded: true, preferred: false }] },
+      // A backend with no downloaded/preferred flags is not a state.
+      { backends: [{ backend: 'cuda' }] },
+    ],
+  },
+  'gpu:download': {
+    validRequest: { backend: 'cuda' },
+    invalidRequests: [
+      {},
+      // tensorrt was scope-cut (M5 prd decision 4) and is not downloadable.
+      { backend: 'tensorrt' },
+      { backend: 'nv' },
+    ],
+    validResponse: { started: true },
+    invalidResponses: [{}, { started: 'yes' }],
+  },
   'profile:get': {
     validRequest: {},
     invalidRequests: [null, 'profile', 42],
@@ -530,6 +557,19 @@ const EVENT_CASES: Record<
         failed: 1,
         error: { code: 'ENGINE_TIMEOUT', message: 'x' },
       },
+    ],
+  },
+  'gpu:progress': {
+    // The richest state; the other states are shape-subsets the desktop gpu
+    // suite drives end to end.
+    valid: { backend: 'cuda', state: 'downloading', received: 1024, total: 10135501 },
+    invalid: [
+      {},
+      // eigen is the bundled tier — it is never downloaded.
+      { backend: 'eigen', state: 'done' },
+      // Byte counts belong to the downloading state and are non-negative.
+      { backend: 'cuda', state: 'downloading', received: -1 },
+      { state: 'done' },
     ],
   },
   'update:status': {

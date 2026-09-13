@@ -41,6 +41,8 @@
     "BATCH_ALREADY_RUNNING": "已有批量分析正在进行。",
     "SOURCE_UNREACHABLE": "无法连接到外部服务。",
     "SOURCE_AUTH_EXPIRED": "登录已过期,请重新登录。",
-    "SOURCE_SCHEMA_CHANGED": "外部服务的数据格式已变更,该功能暂时不可用。"
+    "SOURCE_SCHEMA_CHANGED": "外部服务的数据格式已变更,该功能暂时不可用。",
+    "GPU_ALREADY_DOWNLOADING": "已有一个 GPU 后端正在下载，请稍后再试。",
+    "GPU_PLATFORM_UNSUPPORTED": "当前平台没有可下载的 GPU 后端。"
   }
 }

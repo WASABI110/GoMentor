@@ -38,7 +38,6 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 
 /**
  * A platform-architecture the fetch tooling knows how to target. darwin
@@ -374,8 +373,6 @@ export function assertSize(asset: EngineAsset | WeightAsset, actual: number): vo
  * value is dropped — an edited manifest is reviewed; a sidecar is merely read.
  */
 
-const CHECKSUMS_PATH = join(import.meta.dirname, 'katago-checksums.json')
-
 /** Observed sha256 values keyed by asset id (`engine:win32-x64`, `weights`, …). */
 export type RecordedChecksums = Readonly<Record<string, { readonly sha256: string }>>
 
@@ -413,9 +410,7 @@ const SHA256_HEX = /^[0-9a-f]{64}$/
  * operation that must fail loudly, not the optional prior observation.
  * Injectable path so tests never touch the real sidecar.
  */
-export function readRecordedChecksums(
-  path: string = CHECKSUMS_PATH,
-): RecordedChecksums {
+export function readRecordedChecksums(path: string): RecordedChecksums {
   let parsed: unknown
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8'))
@@ -451,7 +446,7 @@ export function applyRecordedChecksums(recorded: RecordedChecksums): void {
 }
 
 /** Writes every known non-null sha256 to the sidecar. Injectable path for tests. */
-export function persistRecordedChecksums(path: string = CHECKSUMS_PATH): void {
+export function persistRecordedChecksums(path: string): void {
   const assets: Record<string, { sha256: string }> = {}
   for (const [key, asset] of knownAssets()) {
     if (asset.sha256 !== null) assets[key] = { sha256: asset.sha256 }

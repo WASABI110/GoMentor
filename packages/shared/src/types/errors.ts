@@ -96,6 +96,13 @@ export const errorCodeSchema = z.enum([
   // can answer it by showing the running run's status instead.
   'BATCH_ALREADY_RUNNING',
 
+  // GPU tier-2 downloads (M5 Stage 4). One backend download at a time: two
+  // writers to one  file would corrupt each other's resumes, so a
+  // concurrent  is refused rather than queued.
+  'GPU_ALREADY_DOWNLOADING',
+  // A platform with no tier-2 assets (darwin, non-x64) cannot download one.
+  'GPU_PLATFORM_UNSUPPORTED',
+
   // External integrations — inherently fragile, isolated by design.
   'SOURCE_UNREACHABLE',
   'SOURCE_AUTH_EXPIRED',

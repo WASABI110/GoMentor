@@ -226,6 +226,18 @@ Terminal states: `done` (every queued game finished), `cancelled` (the user stop
 
 Auto-update lifecycle: `{ state, version?, progress?, error? }`. Emitted on transitions only — `checking`, `available` (with `version`), `downloading` (with `progress`, throttled by electron-updater itself), `downloaded` (quitting installs it), `error` (a message string, never a stack), and `idle` after a check found nothing. One `disabled` payload is emitted at startup when the update service is ineligible — an unpackaged dev build, `settings.autoUpdate.enabled` off, or the unsigned-macOS policy (`updateEligibility.ts`) — so the settings panel can say why there is no updater instead of showing a dead row. There is no invoke channel on this face: the startup check is automatic, the menu's "Check for Updates" item calls the service directly, and the renderer only listens.
 
+### `gpu:status`
+
+GPU tier-2 snapshot (M5 Stage 4): `{ backends: [{ backend, downloaded, preferred }] }` for `cuda` and `opencl`. `downloaded` means the backend's engine binary exists in the fetch layout (`katago/<target>-<backend>/`, the same tree `locate.ts` resolves when `settings.engine.backend` names it); `preferred` mirrors that setting, read live. A panel mounting between progress events asks this instead of replaying history.
+
+### `gpu:download`
+
+Starts one tier-2 download — `{ backend: 'cuda' | 'opencl' }` → `{ started: true }` — and immediately records the backend as the engine preference (download-then-select is one action, not two). Progress arrives on [`gpu:progress`](#gpuprogress). A second concurrent download is the typed error `GPU_ALREADY_DOWNLOADING`: two writers to one `.partial` file would corrupt each other's resumes. A platform with no tier-2 assets (darwin, non-x64) refuses with `GPU_PLATFORM_UNSUPPORTED`.
+
+### `gpu:progress`
+
+Tier-2 download progress: `{ backend, state, received?, total?, error? }`. States in order: `downloading` (byte counts, throttled to one emission per 512 KB — a fast link must not flood the renderer), `extracting`, then `done` or `error` (a short message; the detail is in the local log, and the `.partial` stays so the next attempt resumes rather than restarts).
+
 ## Adding a channel
 
 1. Add it to `CHANNELS` or `EVENTS` in [`ipc.ts`](../packages/shared/src/ipc.ts) with both schemas.

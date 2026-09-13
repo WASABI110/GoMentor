@@ -41,15 +41,18 @@
     "toolsNo": "Not supported"
   },
   "engine": {
-    "backend": "Compute backend",
-    "backendAuto": "Detect automatically",
+    "backend": "Analysis backend",
+    "backendAuto": "Automatic (built-in CPU engine)",
     "binaryPath": "Engine path",
     "binaryPathDefault": "Use the bundled engine",
     "networkPath": "Network weights",
     "maxVisits": "Visits per move",
     "threads": "Threads",
     "analyzeOwnership": "Compute territory map",
-    "gpuHint": "GPU acceleration (optional): run pnpm fetch:gpu in the repository to download the CUDA/OpenCL engines (6-50MB), then set engine.backend to cuda or opencl in the config file. Leave empty to use the built-in CPU engine."
+    "gpuHint": "GPU acceleration (optional): run pnpm fetch:gpu in the repository to download the CUDA/OpenCL engines (6-50MB), then set engine.backend to cuda or opencl in the config file. Leave empty to use the built-in CPU engine.",
+    "download": "Download",
+    "downloaded": "Downloaded",
+    "useHint": "A downloaded backend is selected automatically; you can also switch manually above."
   },
   "library": {
     "roots": "Watched folders",
