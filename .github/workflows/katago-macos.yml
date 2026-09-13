@@ -161,12 +161,20 @@ jobs:
         # zip preserves the exec bit the extracted binary needs. The sha256
         # sidecar file lets the manifest pin the measured hash (the manifest
         # is the authority; the sidecar file in the release is the receipt).
+        #
+        # The touch before zipping is what makes the zip DETERMINISTIC: a zip
+        # stores the file's mtime, and this workflow re-runs on every manifest
+        # commit (its own paths filter), so an mtime-dependent archive would
+        # change bytes on every re-run and silently break the hash the
+        # manifest pins. Fixed mtime + identical binary content (ccache makes
+        # rebuilds reproduce) => identical zip bytes.
         run: |
           VERSION="${KATAGO_REF#v}"
           NAME="katago-${{ matrix.target }}-${VERSION}"
           mkdir payload
           cp katago payload/
-          ( cd payload && zip "../${NAME}.zip" katago )
+          touch -t 202601010000 payload/katago
+          ( cd payload && zip -q -X "../${NAME}.zip" katago )
           shasum -a 256 "${NAME}.zip" > "${NAME}.zip.sha256"
           cat "${NAME}.zip.sha256"
 
@@ -181,11 +189,13 @@ jobs:
           retention-days: 14
 
       # Publish to the release tag katago-<version> (created from the current
-      # master SHA on first run). Idempotent: an existing release is reused,
-      # `--clobber` replaces a stale asset of the same name. Re-publishing a
-      # DIFFERENT build under the same tag breaks the TOFU chain for anyone
-      # who already fetched the old bytes — bump KATAGO_REF (and the manifest)
-      # instead of re-running this for an already-published version.
+      # master SHA on first run). The drift guard is the point: the manifest
+      # pins these assets' sha256, and this workflow re-runs on unrelated
+      # manifest edits. If a rebuild's bytes differ from what is already
+      # published under the same tag, uploading would silently invalidate
+      # every pinned hash — so that case FAILS here instead. A deliberate
+      # engine change bumps KATAGO_REF (and the manifest in the same commit),
+      # which lands on a fresh tag with nothing to drift from.
       - name: Publish release asset
         if: github.ref == 'refs/heads/master'
         env:
@@ -196,5 +206,17 @@ jobs:
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "KataGo $KATAGO_REF macOS builds" \
-              --notes "CI-built KataGo $KATAGO_REF for the GoMentor macOS engine tier (arm64: METAL, x64: OpenCL). Ad-hoc signed. Consumed by \`pnpm fetch:katago\`; checksums are pinned in scripts/katago-manifest.ts + katago-checksums.json."
+              --notes "CI-built KataGo $KATAGO_REF for the GoMentor macOS engine tier (arm64: METAL, x64: OpenCL). Ad-hoc signed. Consumed by \`pnpm fetch:katago\`; checksums are pinned in scripts/katago-manifest.ts."
+          for zip in katago-src/cpp/katago-darwin-*.zip; do
+            name="$(basename "$zip")"
+            receipt="$zip.sha256"
+            new="$(awk '{print $1}' "$receipt")"
+            if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name.sha256" --dir existing 2>/dev/null; then
+              old="$(awk '{print $1}' "existing/$name.sha256")"
+              if [ "$new" != "$old" ]; then
+                echo "::error::$name bytes drifted (published $old, built $new) without a version bump. If the engine changed, bump KATAGO_REF and the manifest together; if not, investigate the build's reproducibility."
+                exit 1
+              fi
+            fi
+          done
           gh release upload "$TAG" katago-src/cpp/katago-darwin-*.zip katago-src/cpp/katago-darwin-*.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
