@@ -38,13 +38,20 @@
 
 ## Stage 4 — GPU tier-2 + 完整离线包（R4, C4）
 
-- [ ] 实施第一步：GitHub API 拉 v1.18.1 asset 列表核实 CUDA/OpenCL 命名与 bytes（先验证前提）
-- [ ] manifest `tier2Targets` + fetch 脚本 + sidecar
-- [ ] `selectBackend` 纯函数（core）+ `backend-probe.ts` 探测循环 + `settings.engine.backend`
-- [ ] 设置页"启用 GPU 加速"下载流（进度事件复用）+ e2e（假后端 zip）
-- [ ] CI full-offline asset job
-- **Verify（stage 范围）**：C4；探测顺序变异；门禁全绿
-- **提交**：`feat(m5/stage4): GPU tier-2 — CUDA/OpenCL backends, backend probe, full-offline asset`
+**已完成（823542c）**：
+- [x] manifest `engine.tier2`（cuda12.8-cudnn9.8.0 + opencl，win/linux，bytes 实测）+ sidecar `tier2:*` ids（knownAssets 已枚举——实测教训：同 run 内一个后端失败不能丢另一个的 TOFU 记录）
+- [x] `pnpm fetch:gpu`：双后端下载→校验→解压至 `<target>-<backend>/`；**实测 CUDA 全链路通过**（下载+TOFU+解压展平 DLL）
+- [x] core `selectBackend`（cuda>opencl>eigen 顺序 + 显式偏好覆盖）+ 5 单测
+- [x] locate `selectBundledDir`：偏好目录的二进制存在才选（空目录不算），否则落回 tier-1 + 4 单测；index 按 start 时读 `settings.engine.backend`（改设置无需重启）
+- [x] settings i18n gpuHint 键（zh/en）
+
+**剩余（下一会话从这里继续）**：
+- [ ] 设置页引擎区 GPU 下载流（in-app 调 ensureFetched + 进度事件 + backend 选择 UI；现用 CLI + 设置文件）
+- [ ] e2e：假后端 zip 的下载/选择流
+- [ ] CI full-offline asset job（release.yml 加 job：core+tier2+双权重打 zip）
+- [ ] 探测顺序变异条目（mutate- 新 harness 或并入既有）
+- [ ] 残余记录：OpenCL zip 在当前网络路径 6 连"fetch failed"（curl 直连同 reset；CUDA 同链路成功——环境性，CI 网络待验证）
+- **Verify（stage 范围）**：C4
 
 ## Stage 5 — Fox 同步（R5, C5）
 
