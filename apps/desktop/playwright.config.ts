@@ -28,5 +28,8 @@ export default defineConfig({
   // CI must not silently pass a suite where someone left `.only` on one spec.
   forbidOnly: !!process.env['CI'],
   retries: 0,
-  reporter: process.env['CI'] ? 'list' : 'list',
+  // CI adds the `github` reporter: it emits each failing test as a workflow
+  // annotation, which is the one failure-detail channel readable through the
+  // unauthenticated check-runs API (job logs need admin auth).
+  reporter: process.env['CI'] ? [['github'], ['list']] : 'list',
 })
