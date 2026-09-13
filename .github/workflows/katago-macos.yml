@@ -214,8 +214,12 @@ jobs:
           for zip in katago-src/cpp/katago-darwin-*.zip; do
             name="$(basename "$zip")"
             new="$(awk '{print $1}' "$zip.sha256")"
-            if grep -qF "\"$name\"" scripts/katago-manifest.ts; then
-              if ! grep -qF "\"$new\"" scripts/katago-manifest.ts; then
+            # Plain-substring greps, no quote characters: the manifest's
+            # string quoting style (single/double) is not this workflow's
+            # business — measured: quoting the pattern made both greps miss
+            # and the guard silently guarded nothing (4c75db7).
+            if grep -qF "$name" scripts/katago-manifest.ts; then
+              if ! grep -qF "$new" scripts/katago-manifest.ts; then
                 echo "::error::$name built hash $new is not what the manifest pins — the build drifted. Re-pin the manifest from this receipt if the drift is understood, or investigate reproducibility."
                 exit 1
               fi

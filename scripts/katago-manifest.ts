@@ -162,25 +162,27 @@ export const KATAGO_MANIFEST: KatagoManifest = {
       // Source builds (no official macOS release exists — see sourceBuilds).
       // bytes/sha256 below are MEASURED from the published release asset —
       // the workflow uploads a .sha256 receipt alongside the zip, and both
-      // values here come from that receipt (2026-09-13). Unlike the upstream
-      // assets the hash starts pinned, not null: the producing build is ours,
-      // so there is no TOFU "first observation" to wait for. The zip carries
-      // the single ad-hoc-codesigned `katago` Mach-O; the fetcher flattens
-      // and chmods it. Asset names carry no `v` (the workflow derives
+      // values here come from that receipt (2026-09-13; the deterministic
+      // fixed-mtime packaging, which is what the CI drift guard now enforces
+      // against these very pins). Unlike the upstream assets the hash starts
+      // pinned, not null: the producing build is ours, so there is no TOFU
+      // "first observation" to wait for. The zip carries the single
+      // ad-hoc-codesigned `katago` Mach-O; the fetcher flattens and chmods
+      // it. Asset names carry no `v` (the workflow derives
       // `katago-<version>` from `v1.18.1` by stripping the v — consistent
       // between the release tag and the files under it).
       'darwin-arm64': {
         file: 'katago-darwin-arm64-1.18.1.zip',
-        bytes: 3_470_024,
-        sha256: '6d453aea498f5773d9076b60577ba23d48c4560189f82f3ebf9eb23a3a09d73d',
+        bytes: 3_469_971,
+        sha256: '9f370f30fc1ca9d3ba82ffec7d26fb1d0de1fdff96d8a22c0a05c5416de0cf18',
         appImage: false,
         archive: 'katago-darwin-arm64-1.18.1.zip',
         binary: 'katago',
       },
       'darwin-x64': {
         file: 'katago-darwin-x64-1.18.1.zip',
-        bytes: 3_196_724,
-        sha256: 'ff4139c1659493dd1e114f592039f133bc0cdad05fab116dace0d4722f179a72',
+        bytes: 3_196_669,
+        sha256: '8233eb4f7137739a79f66727aba3fdbdaa7bc4483ff4f52d4db7425269ebd477',
         appImage: false,
         archive: 'katago-darwin-x64-1.18.1.zip',
         binary: 'katago',
