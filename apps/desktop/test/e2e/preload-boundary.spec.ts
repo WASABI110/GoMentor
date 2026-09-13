@@ -226,6 +226,7 @@ test('the bridge is immutable from the page and exposes exactly the contract', a
       'onEngineStatus',
       'onEngineAnalysis',
       'onBatchProgress',
+      'onUpdateStatus',
     ].sort(),
   )
 })

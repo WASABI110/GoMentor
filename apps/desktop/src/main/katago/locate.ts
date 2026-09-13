@@ -225,6 +225,42 @@ export function resolveEngineLayout(input: ResolveEngineLayoutInput): LocateOutc
 }
 
 /**
+ * The directory suffix a GPU backend's engine lives under, relative to the
+ * platform's tier-1 directory. A tier-2 download (`pnpm fetch:gpu`, or the
+ * settings flow) populates `katago/<target>-cuda/` etc.; the tier-1 Eigen
+ * binary stays where it has always been.
+ */
+export const BACKEND_DIR_SUFFIX: Record<'cuda' | 'opencl', '-cuda' | '-opencl'> = {
+  cuda: '-cuda',
+  opencl: '-opencl',
+}
+
+/**
+ * Picks the binaries directory for a platform given the user's backend
+ * preference: the preferred GPU backend's directory when it (and its binary)
+ * actually exists, the tier-1 directory otherwise. Pure — the filesystem fact
+ * arrives as `binaryExists`, the layout convention as `dirFor` — so the
+ * fall-through is unit-testable without paths or electron.
+ *
+ * A missing preferred backend degrades silently HERE (tier-1 always works)
+ * rather than as a failed engine start: the setting names a preference, not a
+ * requirement, and a startup failure from a directory the user never
+ * downloaded would read as a broken install.
+ */
+export function selectBundledDir(
+  target: EngineTarget,
+  preference: 'cuda' | 'opencl' | null,
+  binaryExists: (binaryPath: string) => boolean,
+  dirFor: (target: EngineTarget, suffix: '' | '-cuda' | '-opencl') => string,
+): string {
+  if (preference !== null) {
+    const preferred = dirFor(target, BACKEND_DIR_SUFFIX[preference])
+    if (binaryExists(join(preferred, BINARY_NAMES[target]))) return preferred
+  }
+  return dirFor(target, '')
+}
+
+/**
  * The Electron-bound entry point: gathers `process`/filesystem facts and
  * delegates the decision to `resolveEngineLayout`. The override is honoured
  * on every platform — pointing at a homebrew build or a script engine is a
@@ -232,11 +268,21 @@ export function resolveEngineLayout(input: ResolveEngineLayoutInput): LocateOutc
  */
 export function locateBundledEngine(
   env: NodeJS.ProcessEnv = process.env,
+  backendPreference: 'cuda' | 'opencl' | null = null,
 ): LocateOutcome {
   const target = engineTargetFor(process.platform, process.arch)
+  const binariesDir =
+    target === null
+      ? null
+      : selectBundledDir(
+          target,
+          backendPreference,
+          (binaryPath) => existsSync(binaryPath),
+          (t, suffix) => engineBinariesDir(`${t}${suffix}`),
+        )
   return resolveEngineLayout({
     envOverride: env['GOMENTOR_KATAGO_BINARY'],
-    binariesDir: target === null ? null : engineBinariesDir(target),
+    binariesDir,
     weightsDir: weightsResourcesDir(),
     binaryName: target === null ? null : BINARY_NAMES[target],
     isPackaged: app.isPackaged,

@@ -18,6 +18,17 @@ import { crashesDir, dbFile, telemetryLogFile } from './paths'
 import { createWindow } from './window'
 import { applyMenu } from './menu'
 import { createUpdateService } from './update/update'
+import { locateBundledEngine } from './katago/locate'
+
+/**
+ * `settings.engine.backend` → the locate-level preference: a GPU backend name
+ * when the setting names one, null (tier-1 Eigen, or whichever GPU directory
+ * exists) otherwise. Kept here because the shared settings type carries the
+ * raw string; the mapping to the locate seam is wiring, not domain logic.
+ */
+function backendPreference(backend: string | null): 'cuda' | 'opencl' | null {
+  return backend === 'cuda' || backend === 'opencl' ? backend : null
+}
 
 /**
  * Main process entry: single-instance lock, lifecycle, IPC registration, window.
@@ -65,8 +76,14 @@ function createServices() {
   const store = createGameStore(db)
   const analysis = createAnalysisRepository(db)
   // The engine before the LLM service: the agent loop's tool calls reach into
-  // it, so it must exist by the time a run can start.
-  const engine = createEngineService({ settings })
+  // it, so it must exist by the time a run can start. The locate wrapper
+  // re-reads the backend preference per start, so a settings change to
+  // `engine.backend` applies on the next engine start without a relaunch.
+  const engine = createEngineService({
+    settings,
+    locate: (env) =>
+      locateBundledEngine(env, backendPreference(settings.get().engine.backend)),
+  })
   const batch = createBatchService({ store, settings, engine, repository: analysis })
   const llm = createLlmService(settings, secrets, {
     store,
