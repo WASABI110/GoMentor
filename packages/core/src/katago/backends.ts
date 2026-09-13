@@ -15,7 +15,7 @@
 
 export type EngineBackend = 'cuda' | 'opencl' | 'eigen'
 
-export const GPU_BACKENDS: readonly (Exclude<EngineBackend, 'eigen'>)[] = [
+export const GPU_BACKENDS: readonly Exclude<EngineBackend, 'eigen'>[] = [
   'cuda',
   'opencl',
 ]

@@ -376,11 +376,11 @@ describe('the 1 MB rotation', () => {
     // append must wait for the first to be on disk (appends are fire-and-
     // forget, and an unordered pair would be a real ordering bug).
     await expect
-      .poll(() => lines().parsed.length, { timeout: 5_000, intervals: [10] })
+      .poll(() => lines().parsed.length, { timeout: 5_000, interval: 10 })
       .toBe(1)
     telemetry.track({ name: 'app_quit', sessionSeconds: 2 })
     await expect
-      .poll(() => lines().parsed.length, { timeout: 5_000, intervals: [10] })
+      .poll(() => lines().parsed.length, { timeout: 5_000, interval: 10 })
       .toBe(2)
 
     expect(lines().parsed.map((line) => line['sessionSeconds'])).toEqual([1, 2])
