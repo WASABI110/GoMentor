@@ -41,6 +41,13 @@ export const PERMITTED: ReadonlySet<string> = new Set([
   // GPL-compatible. Enumerated rather than excluded because two real transitive
   // dependencies use it, and pretending otherwise would make this a denylist.
   'WTFPL',
+  // sharp's prebuilt binaries (astro's build-time image pipeline) declare
+  // "Apache-2.0 AND LGPL-3.0-or-later". The checker splits compound
+  // expressions into terms, so the LGPL term is what needs permitting: LGPL-3.0
+  // is explicitly GPL-3.0-compatible (LGPL §4 — incorporating a work under it
+  // into a GPL-3.0 project is the library's designed path), and the site ships
+  // no images, so sharp is a build-machine dependency, not shipped code.
+  'LGPL-3.0-or-later',
 ])
 
 /** Strips surrounding parentheses and whitespace from one SPDX term. */

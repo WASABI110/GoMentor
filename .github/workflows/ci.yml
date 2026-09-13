@@ -130,11 +130,11 @@ jobs:
       # which looks like an app defect and is not.
       - name: End-to-end (Linux, headless display)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum pnpm e2e
+        run: xvfb-run --auto-servernum pnpm e2e -- --reporter=github
 
       - name: End-to-end
         if: runner.os != 'Linux'
-        run: pnpm e2e
+        run: pnpm e2e -- --reporter=github
 
       # Unsigned package, per R11. Signing needs secrets that a PR from a fork
       # must never see, and an unsigned artifact still answers the question this
