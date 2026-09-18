@@ -291,6 +291,7 @@ jobs:
       # the run's annotations without opening the job log.
       - name: Full-offline gates (severed network namespace)
         run: |
+          exec > >(tee /tmp/step9.log) 2>&1
           INNER='
             ip link set lo up || { echo "::error::OFFLINE GATE: ip link set lo up failed"; exit 1; }
             if curl -fsSI --max-time 20 "$OFFLINE_PROBE_URL" >/dev/null 2>&1; then
@@ -338,3 +339,18 @@ jobs:
 
           echo "::error::OFFLINE GATE: every namespace rung unavailable — failing loudly (ladder rung d)"
           exit 1
+
+      # The gates step tees its full output to /tmp/step9.log; uploading it
+      # keeps the exact failure (including a silent launch failure) inspectable
+      # from the artifact even when annotations carry no detail.
+      - name: Upload offline-gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-gate-diagnostics
+          path: |
+            /tmp/step9.log
+            /tmp/gate-*.log
+            /tmp/rung*.err
+          if-no-files-found: ignore
+          retention-days: 1
