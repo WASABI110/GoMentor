@@ -363,9 +363,9 @@ jobs:
           echo "::error::OFFLINE GATE: every namespace rung unavailable — failing loudly (ladder rung d)"
           exit 1
 
-      # The gates step tees its full output to /tmp/step9.log; uploading it
-      # keeps the exact failure (including a silent launch failure) inspectable
-      # from the artifact even when annotations carry no detail.
+      # The test gate tees its output to /tmp/gate-test.log; uploading it keeps
+      # the exact failure inspectable from the artifact even when annotations
+      # carry no detail. The rung probes also leave their stderr in /tmp/rung*.
       - name: Upload offline-gate diagnostics
         if: always()
         uses: actions/upload-artifact@v4
