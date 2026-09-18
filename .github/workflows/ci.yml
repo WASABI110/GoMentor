@@ -291,22 +291,23 @@ jobs:
       # the run's annotations without opening the job log.
       - name: Full-offline gates (severed network namespace)
         run: |
-          exec > >(tee /tmp/step9.log) 2>&1
           INNER='
-            ip link set lo up || { echo "::error::OFFLINE GATE: ip link set lo up failed"; exit 1; }
+            set -e
+            ip link set lo up
             if curl -fsSI --max-time 20 "$OFFLINE_PROBE_URL" >/dev/null 2>&1; then
               echo "::error::OFFLINE GATE FAILED: probe still reachable inside the severed namespace"
               exit 1
             fi
             echo "OFFLINE GATE: probe unreachable inside the namespace — sever holds"
             echo "::notice::OFFLINE GATE trap: post-sever probe failed as required (sever holds)"
-            pnpm typecheck > /tmp/gate-typecheck.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: typecheck failed rc=$rc :: $(tail -c 1800 /tmp/gate-typecheck.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
-            echo "::notice::OFFLINE GATE: typecheck passed offline"
-            pnpm test > /tmp/gate-test.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: pnpm test failed rc=$rc :: $(tail -c 1800 /tmp/gate-test.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
-            echo "::notice::OFFLINE GATE: pnpm test passed offline"
-            pnpm build > /tmp/gate-build.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: pnpm build failed rc=$rc :: $(tail -c 1800 /tmp/gate-build.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
-            echo "::notice::OFFLINE GATE: pnpm build passed offline"
-            xvfb-run --auto-servernum pnpm e2e -- --reporter=github > /tmp/gate-e2e.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: e2e failed rc=$rc :: $(tail -c 1800 /tmp/gate-e2e.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
+            echo "::notice::OFFLINE GATE: starting typecheck"
+            pnpm typecheck
+            echo "::notice::OFFLINE GATE: starting test"
+            pnpm test
+            echo "::notice::OFFLINE GATE: starting build"
+            pnpm build
+            echo "::notice::OFFLINE GATE: starting e2e"
+            xvfb-run --auto-servernum pnpm e2e -- --reporter=github
             echo "::notice::OFFLINE GATE: e2e passed offline — all gates green"
           '
           run_gates() { unshare --net --map-root-user -- sh -c "$INNER"; }
