@@ -303,7 +303,16 @@ jobs:
             echo "::notice::OFFLINE GATE: starting typecheck"
             pnpm typecheck
             echo "::notice::OFFLINE GATE: starting test"
-            pnpm test
+            set +e
+            pnpm test 2>&1 | tee /tmp/gate-test.log
+            rc=$?
+            set -e
+            if [ $rc -ne 0 ]; then
+              echo "::error::OFFLINE GATE: pnpm test failed rc=$rc"
+              tail -n 12 /tmp/gate-test.log | while IFS= read -r line; do echo "::notice::TESTLOG $line"; done
+              exit 1
+            fi
+            echo "::notice::OFFLINE GATE: pnpm test passed offline"
             echo "::notice::OFFLINE GATE: starting build"
             pnpm build
             echo "::notice::OFFLINE GATE: starting e2e"
