@@ -221,10 +221,11 @@ jobs:
   #   post-sever — the same curl inside the namespace MUST fail; success means
   #                the sever leaked, and the job fails.
   #
-  # Why each gate survives the cut (checked, not assumed): install and both
-  # fetches run BEFORE the sever; Playwright drives the built Electron binary
-  # (no browser download); the suite's live-probe tests self-skip offline; and
-  # Electron's children inherit the namespace while KataGo speaks stdio.
+  # Why each gate survives the cut (checked, not assumed): install, both
+  # fetches, and both sqlite-binding stages run BEFORE the sever; Playwright
+  # drives the built Electron binary (no browser download); the suite's
+  # live-probe tests self-skip offline; and Electron's children inherit the
+  # namespace while KataGo speaks stdio.
   #
   # Fallback ladder if a future runner image blocks unshare, in order:
   #   (a) re-enable unprivileged userns creation for this run with
@@ -279,6 +280,18 @@ jobs:
         run: |
           pnpm fetch:katago
           pnpm fetch:weights
+
+      # better-sqlite3 binds per ABI (plain Node for vitest, Electron for the
+      # app) and node_modules holds one at a time: `pnpm test` self-corrects to
+      # the node binding and `pnpm e2e` to the electron one by downloading the
+      # other prebuild when needed. Both downloads must happen HERE, with
+      # network, so post-sever swaps resolve from the local prebuild cache —
+      # same "assets present" prep as the engine+weights fetch, and not a
+      # weakening of the gate: the app's runtime needs no download either way.
+      - name: Stage both sqlite bindings (node + electron prebuilds)
+        run: |
+          pnpm --filter @gomentor/desktop exec tsx scripts/sqlite-abi.ts electron
+          pnpm --filter @gomentor/desktop exec tsx scripts/sqlite-abi.ts node
 
       # Vacuity arm of the two-sided trap: if this curl fails, the job fails
       # BEFORE the sever — a post-sever failure would then prove nothing.
