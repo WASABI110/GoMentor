@@ -316,8 +316,13 @@ jobs:
             echo "::notice::OFFLINE GATE: starting typecheck"
             pnpm typecheck
             echo "::notice::OFFLINE GATE: starting test"
+            # No tee/pipe here: the step shell is dash (no pipefail, no
+            # PIPESTATUS), and `cmd | tee` would hand `$?` tee's status — a
+            # failing suite would read as rc=0 and the gate would stay green.
+            # Redirect-only captures pnpm's real status; the failure branch
+            # tails the log into annotations.
             set +e
-            pnpm test 2>&1 | tee /tmp/gate-test.log
+            pnpm test > /tmp/gate-test.log 2>&1
             rc=$?
             set -e
             if [ $rc -ne 0 ]; then
@@ -363,9 +368,10 @@ jobs:
           echo "::error::OFFLINE GATE: every namespace rung unavailable — failing loudly (ladder rung d)"
           exit 1
 
-      # The test gate tees its output to /tmp/gate-test.log; uploading it keeps
-      # the exact failure inspectable from the artifact even when annotations
-      # carry no detail. The rung probes also leave their stderr in /tmp/rung*.
+      # The test gate redirects its output to /tmp/gate-test.log; uploading it
+      # keeps the exact failure inspectable from the artifact even when
+      # annotations carry no detail. The rung probes also leave their stderr
+      # in /tmp/rung*.
       - name: Upload offline-gate diagnostics
         if: always()
         uses: actions/upload-artifact@v4
