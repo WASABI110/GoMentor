@@ -1,13 +1,16 @@
 name: CI
 
-# R11: three-OS matrix × Node 22 LTS, plus the lockfile-drift, license, i18n, and
-# Trellis-immutability gates. R2 forbids CI reading or writing `.trellis/`,
+# R11: three-OS matrix × Node 22 LTS, plus the lockfile-drift, license, i18n,
+# Trellis-immutability gates, and (offline job) the M5-sweep full-offline gate.
+# R2 forbids CI reading or writing `.trellis/`,
 # `.claude/`, `.codex/`, `.qoder/`, `.agents/`, or `AGENTS.md` — no step below
 # references any of them except the guard that asserts they were not modified.
 
 on:
   push:
-    branches: [main, master]
+    # m5-residuals-ci is the M5-sweep iteration branch for the full-offline
+    # gate (AC2); drop it from this list when the sweep merges to master.
+    branches: [main, master, m5-residuals-ci]
   pull_request:
   # Manual runs, so a gate can be exercised without inventing a commit.
   workflow_dispatch:
@@ -192,3 +195,146 @@ jobs:
           path: apps/desktop/dist
           if-no-files-found: ignore
           retention-days: 7
+
+  # --- M5 residual R2: the full-offline gate ---------------------------------
+  #
+  # Claim under test: once engine and weights are present, the app runs fully
+  # offline — structural, not incidental. So this job installs and fetches WITH
+  # network, then severs every outbound path (loopback exempt) and re-runs the
+  # gates (typecheck, test, build, e2e) inside the cut.
+  #
+  # Why a user+net namespace and not iptables: the runner agent keeps its own
+  # outbound connection to the Actions service; dropping the machine's OUTPUT
+  # chain would hang the job's reporter. `unshare --net --map-root-user` puts
+  # the TEST TREE in a private namespace while the reporter lives outside it.
+  # `--map-root-user` keeps env, HOME, and PATH identical (no sudo inside the
+  # gates, no root store paths) and the mapped root holds CAP_NET_ADMIN over
+  # the namespace's devices — which `ip link set lo up` needs, because a new
+  # namespace starts with lo DOWN and Playwright talks to Electron over
+  # 127.0.0.1. Without `lo up`, e2e dies for an environmental reason and reads
+  # as an app defect.
+  #
+  # The trap is two-sided (a gate that cannot fail is not a gate):
+  #   pre-sever  — the probe curl MUST succeed, proving the job really had
+  #                network to lose (the fetch step above already required it;
+  #                this probe makes the proof local and explicit);
+  #   post-sever — the same curl inside the namespace MUST fail; success means
+  #                the sever leaked, and the job fails.
+  #
+  # Why each gate survives the cut (checked, not assumed): install and both
+  # fetches run BEFORE the sever; Playwright drives the built Electron binary
+  # (no browser download); the suite's live-probe tests self-skip offline; and
+  # Electron's children inherit the namespace while KataGo speaks stdio.
+  #
+  # Fallback ladder if a future runner image blocks unshare, in order:
+  #   (a) re-enable unprivileged userns creation for this run with
+  #       `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`,
+  #       then the identical namespace command — ubuntu-24.04 runner images
+  #       ship the AppArmor restriction on, and the step below implements
+  #       rungs (a) and (b) automatically, logging which rung executed;
+  #   (b) `sudo env HOME=$HOME PATH=$PATH unshare --net` — as real root the
+  #       net namespace needs no user namespace, so the AppArmor restriction
+  #       does not apply; env is preserved explicitly so pnpm's store and
+  #       PATH resolve identically;
+  #   (c) env-scoped dead-proxy poisoning (HTTPS_PROXY=http://127.0.0.1:9) —
+  #       WEAKER: undici fetches ignore proxy env, so it asserts only
+  #       proxy-aware callers; a job taking this rung must record why;
+  #   (d) fail the job loudly rather than silently downgrade the claim.
+  # Every rung emits ::notice::/::error:: workflow commands, so the chosen
+  # rung and any failure are readable from the run's annotations.
+  # One OS (ubuntu) is enough: the claim is platform-agnostic, and one OS
+  # keeps the cost flat — the same rationale as the `once` job.
+  offline:
+    name: Full-offline gates
+    runs-on: ubuntu-latest
+    env:
+      # The host `pnpm install` proved reachable moments earlier; a registry
+      # HEAD is the lightest probe that exercises DNS + TCP + TLS together.
+      OFFLINE_PROBE_URL: https://registry.npmjs.org
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # Same content-addressed cache as the `test` job: the engine and net are
+      # downloaded payloads pinned by scripts/katago-manifest.ts, and the
+      # fetch below fails loudly if a cache miss cannot reach the source.
+      - name: Restore KataGo engine + weights
+        id: katago-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/resources
+          key: katago-${{ runner.os }}-${{ hashFiles('scripts/katago-manifest.ts') }}
+
+      # Runs with full network: this is the "once present" half of the claim.
+      - name: Fetch KataGo engine + weights
+        run: |
+          pnpm fetch:katago
+          pnpm fetch:weights
+
+      # Vacuity arm of the two-sided trap: if this curl fails, the job fails
+      # BEFORE the sever — a post-sever failure would then prove nothing.
+      - name: Pre-sever probe (network MUST be reachable)
+        run: curl -fsSI --max-time 20 "$OFFLINE_PROBE_URL"
+
+      # Assertion arm: the same probe inside the namespace MUST now fail.
+      # Mechanism selection is loud by design — every rung emits workflow
+      # notices/errors so the chosen rung and the trap outcome are visible in
+      # the run's annotations without opening the job log.
+      - name: Full-offline gates (severed network namespace)
+        run: |
+          INNER='
+            ip link set lo up || { echo "::error::OFFLINE GATE: ip link set lo up failed"; exit 1; }
+            if curl -fsSI --max-time 20 "$OFFLINE_PROBE_URL" >/dev/null 2>&1; then
+              echo "::error::OFFLINE GATE FAILED: probe still reachable inside the severed namespace"
+              exit 1
+            fi
+            echo "OFFLINE GATE: probe unreachable inside the namespace — sever holds"
+            echo "::notice::OFFLINE GATE trap: post-sever probe failed as required (sever holds)"
+            pnpm typecheck > /tmp/gate-typecheck.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: typecheck failed rc=$rc :: $(tail -c 1800 /tmp/gate-typecheck.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
+            echo "::notice::OFFLINE GATE: typecheck passed offline"
+            pnpm test > /tmp/gate-test.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: pnpm test failed rc=$rc :: $(tail -c 1800 /tmp/gate-test.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
+            echo "::notice::OFFLINE GATE: pnpm test passed offline"
+            pnpm build > /tmp/gate-build.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: pnpm build failed rc=$rc :: $(tail -c 1800 /tmp/gate-build.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
+            echo "::notice::OFFLINE GATE: pnpm build passed offline"
+            xvfb-run --auto-servernum pnpm e2e -- --reporter=github > /tmp/gate-e2e.log 2>&1 || { rc=$?; echo "::error::OFFLINE GATE: e2e failed rc=$rc :: $(tail -c 1800 /tmp/gate-e2e.log | tr -d '\r' | tr '\n' '|')"; exit 1; }
+            echo "::notice::OFFLINE GATE: e2e passed offline — all gates green"
+          '
+          run_gates() { unshare --net --map-root-user -- sh -c "$INNER"; }
+
+          echo "::notice::OFFLINE GATE: unshare at $(command -v unshare || echo MISSING)"
+          if unshare --net --map-root-user -- sh -c "ip link set lo up" 2>/tmp/rung0.err; then
+            echo "::notice::OFFLINE GATE: rung 0 (unprivileged user+net namespace) available"
+            run_gates
+            exit $?
+          fi
+          echo "::error::OFFLINE GATE: rung 0 blocked: $(cat /tmp/rung0.err)"
+
+          if sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 2>/tmp/runga.err; then
+            echo "::notice::OFFLINE GATE: rung a — re-enabled unprivileged userns via sudo sysctl"
+            if unshare --net --map-root-user -- sh -c "ip link set lo up" 2>/tmp/runga2.err; then
+              run_gates
+              exit $?
+            fi
+            echo "::error::OFFLINE GATE: rung a still blocked after sysctl: $(cat /tmp/runga2.err)"
+          else
+            echo "::error::OFFLINE GATE: rung a sysctl failed: $(cat /tmp/runga.err)"
+          fi
+
+          if sudo env "HOME=$HOME" "PATH=$PATH" "CI=$CI" unshare --net -- sh -c "ip link set lo up" 2>/tmp/rungb.err; then
+            echo "::notice::OFFLINE GATE: rung b — sudo namespace with env preserved explicitly"
+            sudo env "HOME=$HOME" "PATH=$PATH" "CI=$CI" unshare --net -- sh -c "$INNER"
+            exit $?
+          fi
+          echo "::error::OFFLINE GATE: rung b failed: $(cat /tmp/rungb.err)"
+
+          echo "::error::OFFLINE GATE: every namespace rung unavailable — failing loudly (ladder rung d)"
+          exit 1
